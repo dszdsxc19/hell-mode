@@ -1,0 +1,38 @@
+{
+  "name": "hell-mode-demo",
+  "version": "1.0.0",
+  "description": "A reproducible, entertainment-only hell-mode CLI demo",
+  "repository": "github:dszdsxc19/hell-mode",
+  "license": "MIT",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "private": true,
+  "dependencies": {
+    "@fontsource/noto-sans-sc": "5.2.9",
+    "@remotion/cli": "4.0.538",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.538"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.538",
+    "@types/react": "19.2.7",
+    "@types/web": "0.0.166",
+    "eslint": "10.12.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio --no-open",
+    "build": "remotion bundle",
+    "lint": "eslint src capture.mjs && tsc",
+    "capture": "node capture.mjs",
+    "render:gif": "remotion render src/index.ts HellMode ../../docs/assets/hell-mode-demo.gif --codec=gif --every-nth-frame=2",
+    "render:mp4": "remotion render src/index.ts HellMode out/hell-mode-demo.mp4 --codec=h264",
+    "poster": "remotion still src/index.ts HellMode ../../docs/assets/hell-mode-demo.png --frame=300"
+  },
+  "allowScripts": {
+    "esbuild": false
+  }
+}

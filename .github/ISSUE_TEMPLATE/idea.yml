@@ -1,0 +1,17 @@
+name: Idea or integration
+description: Propose an agent host, notification plugin, or entertaining experiment.
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Concrete scenario
+      description: What happens, who needs to act, and what can the system actually observe?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected behavior and verification
+      description: Describe the smallest useful change and how we can demonstrate it with a local simulation.
+    validations:
+      required: true

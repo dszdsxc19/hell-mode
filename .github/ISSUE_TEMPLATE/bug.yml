@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible CLI, watchdog, hook, or plugin problem.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Paste hell version --json, OS, and agent host/version if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Prefer a minimal log-channel simulation. Include commands, expected result, and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Include exit codes and relevant JSON. Remove tokens, personal data, private paths, and source code before sharing.

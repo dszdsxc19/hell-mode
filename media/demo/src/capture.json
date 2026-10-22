@@ -1,0 +1,25 @@
+{
+  "schema_version": "hell-mode/demo-v1",
+  "channel": "log",
+  "max_attempts": 3,
+  "agent_output": "agent-finished",
+  "child_exit_code": 0,
+  "run_exit_code": 3,
+  "verdict": "unmet",
+  "attempts": [
+    {
+      "number": 1,
+      "state": "simulated"
+    },
+    {
+      "number": 2,
+      "state": "simulated"
+    }
+  ],
+  "takeover": {
+    "incident": "taken_over",
+    "verdict": "unmet",
+    "cancelled_receipts": 2,
+    "reminders_after_wait": 2
+  }
+}
