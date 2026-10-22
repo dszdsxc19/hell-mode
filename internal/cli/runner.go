@@ -21,8 +21,9 @@ func (a *app) runCommand() *cobra.Command {
 HELL_TASK_ID, HELL_RUN_ID, HELL_EVENT_TOKEN and HELL_STATE_DIR for hooks.
 Child output is stored under state-dir/runs, and mirrored to stderr in human
 mode. JSON mode never mixes child output with the result envelope.
-Use --no-input for agents that must not read stdin. Real notification channels
-require a recently seen watchdog; log simulations can run without one.
+Use --no-input for agents that must not read stdin. When notifications are
+enabled, real channels require a recently seen watchdog; quiet tasks and log
+simulations can run without one.
 --rearm explicitly resumes a stopped task with the same contract and deadline.`, Example: `  hell run task_123 --json --no-input -- codex exec "fix the tests"
   hell run task_123 -- claude
   hell run task_123 --rearm -- sh -c 'exit 1'`, Args: args(cobra.MinimumNArgs(2)), RunE: func(cmd *cobra.Command, values []string) error {
@@ -30,19 +31,6 @@ require a recently seen watchdog; log simulations can run without one.
 			return fault.New("invalid_argument", 2, "use run TASK_ID -- COMMAND [ARG...]")
 		}
 		e := a.engine()
-		original, err := e.Get(values[0])
-		if err != nil {
-			return err
-		}
-		if original.Policy.Channel != "log" {
-			st, err := e.Store.Snapshot()
-			if err != nil {
-				return err
-			}
-			if time.Since(st.WatchdogAt) > 5*time.Second {
-				return fault.New("watchdog_unavailable", 5, "start hell watch with this state-dir before using a real notification channel")
-			}
-		}
 		t, token, err := e.StartRun(values[0], rearm)
 		if err != nil {
 			return err

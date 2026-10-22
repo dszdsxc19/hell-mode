@@ -26,9 +26,10 @@ type Notifier interface {
 	Call(context.Context, string, string, protocol.Notification) (*protocol.Result, error)
 }
 type Engine struct {
-	Store    state.Store
-	Notifier Notifier
-	Now      func() time.Time
+	Store      state.Store
+	Notifier   Notifier
+	Now        func() time.Time
+	WatchEpoch *uint64 // Bound for a persistent watcher; nil for a single scheduling call.
 }
 
 func (e Engine) now() time.Time {
@@ -80,6 +81,7 @@ func (e Engine) Arm(t model.Task) (*model.Task, error) {
 				return fault.New("not_found", 4, "register notification plugin %q first", t.Policy.Channel)
 			}
 		}
+		t.Quiet = st.Presence.Mode != "available"
 		st.Tasks[t.ID] = &t
 		return nil
 	})
@@ -135,7 +137,7 @@ func (e Engine) StartRun(id string, rearm bool) (*model.Task, string, error) {
 			return fault.New("conflict", 5, "task already has a running attempt")
 		}
 		if t.Incident != nil {
-			if t.Armed {
+			if t.Armed && !(rearm && t.Quiet) {
 				return fault.New("conflict", 5, "take over or disarm the current incident before starting another run")
 			}
 			for _, attempt := range t.Incident.Attempts {
@@ -155,6 +157,15 @@ func (e Engine) StartRun(id string, rearm bool) (*model.Task, string, error) {
 		}
 		r := model.Run{ID: model.ID("run"), State: "running", StartedAt: e.now(), LastHeartbeat: e.now()}
 		t.Armed, t.Verdict, t.CurrentRunID = true, "pending", r.ID
+		if rearm && st.Presence.Mode == "available" {
+			t.Quiet = false
+		}
+		if st.Presence.Mode != "available" {
+			t.Quiet = true
+		}
+		if t.Policy.Channel != "log" && !t.Quiet && e.now().Sub(st.WatchdogAt) > 5*time.Second {
+			return fault.New("watchdog_unavailable", 5, "start hell watch with this state-dir before using a real notification channel")
+		}
 		t.PendingVerification, t.VerificationLeaseUntil = false, time.Time{}
 		t.Runs = append(t.Runs, r)
 		if t.Incident != nil {
@@ -255,6 +266,9 @@ func (e Engine) verify(ctx context.Context, id, runID string, queuedOnly bool) (
 		}
 		if queuedOnly && !current.PendingVerification {
 			return fault.New("conflict", 5, "queued verification was already claimed")
+		}
+		if queuedOnly && e.watchStopped(st.Presence) {
+			return fault.New("conflict", 5, "watching has ended for today")
 		}
 		if e.now().Before(current.VerificationLeaseUntil) {
 			return fault.New("verification_busy", 5, "verification is already running; query status before retrying")
@@ -364,6 +378,16 @@ func (e Engine) Act(ctx context.Context, id, action string, until time.Time) (*m
 
 // Tick atomically claims attempts, then performs external calls without holding a database lock.
 func (e Engine) Tick(ctx context.Context) (int, error) {
+	presence, err := e.Presence()
+	if err != nil {
+		return 0, err
+	}
+	if e.WatchEpoch == nil {
+		e.WatchEpoch = &presence.WatchEpoch
+	}
+	if e.watchStopped(presence) {
+		return 0, e.cancelAllOutstanding(ctx)
+	}
 	// Host callbacks only enqueue verification; expensive checks run here, outside callback lifetime.
 	queued, err := e.List()
 	if err != nil {
@@ -383,6 +407,9 @@ func (e Engine) Tick(ctx context.Context) (int, error) {
 	type claim struct{ taskID, incidentID, attemptID string }
 	claims := []claim{}
 	err = e.Store.Update(func(st *state.State) error {
+		if e.watchStopped(st.Presence) {
+			return nil
+		}
 		now := e.now()
 		st.WatchdogAt = now
 		for _, t := range st.Tasks {
@@ -440,6 +467,9 @@ func (e Engine) Tick(ctx context.Context) (int, error) {
 			if inflight {
 				continue
 			}
+			if st.Presence.Mode != "available" || t.Quiet {
+				continue
+			}
 			if len(in.Attempts) >= t.Policy.MaxAttempts {
 				in.State = "exhausted"
 				t.Armed = false
@@ -473,7 +503,11 @@ func (e Engine) Tick(ctx context.Context) (int, error) {
 }
 
 func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) error {
-	t, err := e.Get(id)
+	st, err := e.Store.Snapshot()
+	if err != nil {
+		return err
+	}
+	t, err := task(st, id)
 	if err != nil {
 		return err
 	}
@@ -485,7 +519,7 @@ func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) erro
 			}
 		}
 	}
-	if in == nil || in.ID != incidentID || !t.Armed || in.State != "open" {
+	if in == nil || in.ID != incidentID || !t.Armed || in.State != "open" || t.Quiet || st.Presence.Mode != "available" || e.watchStopped(st.Presence) {
 		return e.Store.Update(func(st *state.State) error {
 			current, err := task(st, id)
 			if err != nil {
@@ -507,7 +541,7 @@ func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) erro
 	}
 	n := protocol.Notification{TaskID: id, IncidentID: incidentID, AttemptID: attemptID, Title: "hell-mode: task needs attention", Body: fmt.Sprintf("Task %s: %s. Inspect with hell status %s. Entertainment only.", id, in.Reason, id), ExpiresAt: expires}
 	result, sendErr := e.Notifier.Call(ctx, t.Policy.Channel, "notify", n)
-	return e.Store.Update(func(st *state.State) error {
+	err = e.Store.Update(func(st *state.State) error {
 		t, err := task(st, id)
 		if err != nil {
 			return err
@@ -530,16 +564,25 @@ func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) erro
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// A human action may have landed while the provider request was in flight.
+	return e.CancelOutstanding(ctx, id)
 }
 
 // CancelOutstanding persists failed cancellations for bounded retry by a later watchdog tick.
 func (e Engine) CancelOutstanding(ctx context.Context, id string) error {
-	t, err := e.Get(id)
+	st, err := e.Store.Snapshot()
+	if err != nil {
+		return err
+	}
+	t, err := task(st, id)
 	if err != nil {
 		return err
 	}
 	in := t.Incident
-	if in == nil || (t.Armed && in.State == "open") {
+	if in == nil || (t.Armed && in.State == "open" && !t.Quiet && st.Presence.Mode == "available") {
 		return nil
 	}
 	for _, a := range in.Attempts {

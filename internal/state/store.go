@@ -21,6 +21,7 @@ type State struct {
 	Events     map[string]bool              `json:"events"`
 	Plugins    map[string]protocol.Manifest `json:"plugins"`
 	WatchdogAt time.Time                    `json:"watchdog_at"`
+	Presence   model.Presence               `json:"presence"`
 }
 
 type Store struct{ Dir string }
@@ -74,7 +75,7 @@ func (s Store) Snapshot() (*State, error) {
 }
 
 func empty() *State {
-	return &State{Version: 1, Tasks: map[string]*model.Task{}, Tokens: map[string]string{}, Events: map[string]bool{}, Plugins: map[string]protocol.Manifest{}}
+	return &State{Version: 2, Tasks: map[string]*model.Task{}, Tokens: map[string]string{}, Events: map[string]bool{}, Plugins: map[string]protocol.Manifest{}, Presence: model.Presence{Mode: "available"}}
 }
 
 // load rejects corrupt or future state before any caller can overwrite it.
@@ -89,8 +90,23 @@ func load(tx *bolt.Tx) (*State, error) {
 			return nil, fmt.Errorf("decode state: %w", err)
 		}
 	}
-	if st.Version != 1 {
+	if st.Version != 1 && st.Version != 2 {
 		return nil, fmt.Errorf("unsupported state version %d", st.Version)
+	}
+	// v1 omitted human availability and per-task silence. The next write stores v2,
+	// which an older binary refuses rather than dropping these boundaries.
+	st.Version = 2
+	if st.Presence.Mode == "" {
+		st.Presence.Mode = "available"
+	}
+	switch st.Presence.Mode {
+	case "available", "ended":
+	case "away":
+		if st.Presence.Until.IsZero() {
+			return nil, fmt.Errorf("away presence is missing its agreed time")
+		}
+	default:
+		return nil, fmt.Errorf("state contains an invalid presence mode")
 	}
 	if st.Tasks == nil || st.Tokens == nil || st.Events == nil || st.Plugins == nil {
 		return nil, fmt.Errorf("state is missing required collections")

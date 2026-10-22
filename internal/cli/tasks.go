@@ -206,18 +206,34 @@ func (a *app) watchCommand() *cobra.Command {
 This local implementation shares --state-dir with the runner; it cannot monitor
 a powered-off machine remotely. Supervise it externally when experimenting.
 With --json, continuous mode writes one envelope per tick as NDJSON.
-No process detaches itself and no system service is installed.`, Example: "  hell watch --json\n  hell watch --once --json", Args: args(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
+end makes this watch exit silently at its next state check. An ended watch
+does not restart when the human returns. No process detaches itself and no
+system service is installed.`, Example: "  hell watch --json\n  hell watch --once --json", Args: args(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
 		if interval < time.Millisecond {
 			return fault.New("invalid_argument", 2, "--interval must be at least 1ms")
 		}
 		e := a.engine()
+		started, err := e.Presence()
+		if err != nil {
+			return err
+		}
+		e.WatchEpoch = &started.WatchEpoch
 		for {
 			count, err := e.Tick(cmd.Context())
 			if err != nil {
 				return err
 			}
-			a.data = map[string]any{"attempts_claimed": count, "at": time.Now().UTC()}
+			presence, err := e.Presence()
+			if err != nil {
+				return err
+			}
+			stopped := presence.Mode == "ended" || presence.WatchEpoch != started.WatchEpoch
+			a.data = map[string]any{"attempts_claimed": count, "at": time.Now().UTC(), "stopped": stopped}
 			if once {
+				return nil
+			}
+			if stopped {
+				a.silent = true
 				return nil
 			}
 			if a.json {

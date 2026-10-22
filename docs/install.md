@@ -52,4 +52,6 @@ shasum -a 256 -c SHA256SUMS
 
 `takeover TASK_ID` 停止本轮提醒并保留验收证据；`disarm TASK_ID` 解除布防；在看守终端按 Ctrl+C 停止看守进程。默认状态目录由 `hell doctor --json` 查看，也可用 `--state-dir` 或 `HELL_STATE_DIR` 指定。
 
+`vanish --for 25m` 让同一目录的任务保持静默，到期仍等待本人主动 `back`；`end` 结束本次值班并让看守退出。复用已结束的演练目录时，由本人先执行 `back`，再启动 `watch`。旧任务保持静默，重新监看须明确 `run --rearm`。这些操作保留真实验收结论，见 [人的联系边界](cli.md#番茄失踪与今天结束)。
+
 本地看守与任务机共享文件状态，整机休眠或断电期间无法继续执行检查和通知。手机详情入口、远程看守和电话通道尚未实现。Pushover 适配器只完成本地 HTTP 模拟验证，真实手机行为待验收。

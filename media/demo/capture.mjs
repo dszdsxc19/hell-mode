@@ -21,10 +21,16 @@ const binary = join(
 let watcher;
 let watcherClosed;
 
-function cli(args, expected = 0) {
+function cli(args, expected = 0, json = true) {
   const result = spawnSync(
     binary,
-    ["--state-dir", join(scratch, "state"), "--json", "--no-input", ...args],
+    [
+      "--state-dir",
+      join(scratch, "state"),
+      ...(json ? ["--json"] : []),
+      "--no-input",
+      ...args,
+    ],
     { cwd: scratch, encoding: "utf8", timeout: 15_000 },
   );
   assert.equal(
@@ -32,6 +38,7 @@ function cli(args, expected = 0) {
     expected,
     `hell ${args[0]}: ${result.stderr || result.error || result.stdout}`,
   );
+  if (!json) return result.stdout.trimEnd();
   const envelope = JSON.parse(result.stdout);
   assert.equal(envelope.schema_version, "hell-mode/v1");
   return envelope;
@@ -108,19 +115,47 @@ try {
   assert.equal(agentOutput, "agent-finished");
   const alarm = await waitForAttempts(task.id, 2);
   assert.equal(alarm.incident.attempts.length, 2);
-  const takeover = cli(["takeover", task.id]).data;
-  assert.equal(takeover.incident.state, "taken_over");
-  assert.equal(takeover.verdict, "unmet");
-  assert.ok(takeover.incident.attempts.every((attempt) => attempt.cancelled));
-  await delay(2300);
-  const stopped = cli(["status", task.id]).data;
+  const vanished = cli(["vanish", "--for", "100ms"]).data;
+  assert.equal(vanished.mode, "away");
+  const quiet = cli(["status", task.id]).data;
+  assert.equal(quiet.quiet, true);
+  assert.ok(quiet.incident.attempts.every((attempt) => attempt.cancelled));
+  await delay(200);
+  const afterTimer = cli(["presence"]).data;
   assert.equal(
-    stopped.incident.attempts.length,
-    2,
-    "takeover did not stop reminders",
+    afterTimer.mode,
+    "away",
+    "timer returned the human automatically",
   );
+  const back = cli(["back"]).data;
+  assert.equal(back.mode, "available");
+  await delay(2300);
+  const afterBack = cli(["status", task.id]).data;
+  assert.equal(afterBack.quiet, true, "back resumed an old task automatically");
+  assert.equal(
+    afterBack.incident.attempts.length,
+    2,
+    "back replayed old reminders",
+  );
+  assert.equal(watcher.exitCode, null, "watchdog stopped before end");
+  assert.equal(watcher.signalCode, null);
+  const ending = cli(["end"], 0, false);
+  assert.equal(ending, "任务未完成。\n\n你决定今天到此为止。\n\n看守已停止。");
+  const watchdogTimeout = setTimeout(() => watcher.kill("SIGKILL"), 5000);
+  let watchExit;
+  try {
+    watchExit = await watcherClosed;
+  } finally {
+    clearTimeout(watchdogTimeout);
+  }
+  assert.equal(watchExit[0], 0, "end did not stop the watchdog normally");
+  assert.equal(watchExit[1], null);
+  const stopped = cli(["status", task.id]).data;
+  assert.equal(stopped.verdict, "unmet");
+  const ended = cli(["presence"]).data;
+  assert.equal(ended.mode, "ended");
   const facts = {
-    schema_version: "hell-mode/demo-v1",
+    schema_version: "hell-mode/demo-v2",
     channel: task.policy.channel,
     max_attempts: task.policy.max_attempts,
     agent_output: agentOutput,
@@ -131,13 +166,24 @@ try {
       number: index + 1,
       state: attempt.state,
     })),
-    takeover: {
-      incident: takeover.incident.state,
-      verdict: takeover.verdict,
-      cancelled_receipts: takeover.incident.attempts.filter(
+    vanish: {
+      mode: vanished.mode,
+      quiet: quiet.quiet,
+      cancelled_receipts: quiet.incident.attempts.filter(
         (attempt) => attempt.cancelled,
       ).length,
-      reminders_after_wait: stopped.incident.attempts.length,
+    },
+    after_timer: { mode: afterTimer.mode },
+    back: {
+      mode: back.mode,
+      quiet: afterBack.quiet,
+      reminders_after_wait: afterBack.incident.attempts.length,
+    },
+    end: {
+      mode: ended.mode,
+      message: ending,
+      watch_exit_code: watchExit[0],
+      verdict: stopped.verdict,
     },
   };
   await writeFile(
@@ -145,7 +191,7 @@ try {
     JSON.stringify(facts, null, 2) + "\n",
   );
   log(
-    "Captured: agent exit 0 → unmet → 2 simulated reminders → takeover → reminders stopped; verdict remains unmet.",
+    "Captured: unmet → 2 simulated reminders → vanish → timer stays away → back stays quiet → end stops watchdog; verdict remains unmet.",
   );
 } finally {
   if (watcher && watcher.exitCode === null && watcher.signalCode === null) {

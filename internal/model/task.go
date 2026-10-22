@@ -36,6 +36,7 @@ type Task struct {
 	Policy                 Policy        `json:"policy"`
 	CreatedAt              time.Time     `json:"created_at"`
 	Armed                  bool          `json:"armed"`
+	Quiet                  bool          `json:"quiet"`
 	Verdict                string        `json:"verdict"`
 	CurrentRunID           string        `json:"current_run_id,omitempty"`
 	Runs                   []Run         `json:"runs"`

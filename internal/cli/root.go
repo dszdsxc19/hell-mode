@@ -29,6 +29,7 @@ type app struct {
 	jsonOnError   bool
 	data          any
 	silent        bool
+	human         string
 }
 
 // Execute emits exactly one JSON envelope for finite commands, including failures.
@@ -73,7 +74,9 @@ func Execute(ctx context.Context, args []string, in io.Reader, out, errOut io.Wr
 			return 1
 		}
 	} else {
-		if a.data != nil {
+		if a.human != "" && err == nil {
+			fmt.Fprintln(out, a.human)
+		} else if a.data != nil {
 			b, _ := json.MarshalIndent(a.data, "", "  ")
 			fmt.Fprintln(out, string(b))
 		}
@@ -99,11 +102,20 @@ Exit codes: 0 success; 1 operational/unknown outcome; 2 invalid input;
 3 goal unmet or child failed; 4 not found; 5 conflict/invalid event authority.
 Task status reads return 0 even when the recorded goal is unmet.
 
+Human boundaries: vanish --for 25m makes this state directory quiet until the
+human explicitly returns with back. Timer expiry never calls the human back.
+back does not replay old alerts. end stops watchdogs and keeps unfinished work.
+These actions require the human's instruction, never an agent's initiative.
+
 Use only for voluntary, bounded daytime experiments. Do not rely on this for
 critical alerts or interrupt real sleep.`, Example: `  hell schema --json
   hell arm --goal "tests pass" --verify-json '["go","test","./..."]' --deadline +10m --dry-run --json
   hell watch --json
-  hell status --json`, SilenceErrors: true, SilenceUsage: true}
+  hell status --json
+  hell vanish --for 25m
+  hell presence --json
+  hell back
+  hell end`, SilenceErrors: true, SilenceUsage: true}
 	a.root = root
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
@@ -158,6 +170,7 @@ critical alerts or interrupt real sleep.`, Example: `  hell schema --json
 		return nil
 	}})
 	root.AddCommand(a.armCommand(), a.runCommand(), a.statusCommand(), a.verifyCommand(), a.eventCommand(), a.watchCommand(), a.actionCommand("takeover"), a.actionCommand("snooze"), a.actionCommand("disarm"), a.pluginCommand(), a.setupCommand(), a.hookCommand(), a.doctorCommand())
+	root.AddCommand(a.presenceCommand(), a.vanishCommand(), a.backCommand(), a.endCommand())
 	return root
 }
 
