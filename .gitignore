@@ -1,0 +1,6 @@
+/bin/
+/dist/
+/.hell-mode/
+*.test
+coverage.out
+.DS_Store

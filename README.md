@@ -9,7 +9,41 @@
 
 hell-mode 是面向 Agent 任务的值班系统。目标没达成，就按约定升级叫人：推送、响铃、打给自己的电话，直到你明确接管。
 
-**当前阶段：概念与设计。CLI、hooks、skill、独立看守和通知通道均未实现，下文功能与命令均为计划。**
+**当前阶段：Go CLI 初版。** 已实现本地任务、验收、独立看守进程、通知插件、Claude Code hooks 适配器与随包 skill。手机详情页、远程看守、电话和设备联动仍在路线图中；下文夜间剧情属于虚构设想。
+
+## 开始演练
+
+需要 Go 1.23 或更高版本；当前运行验收以 macOS / Linux 为主。
+
+```sh
+go build -o ./bin/hell ./cmd/hell
+./bin/hell --help
+./bin/hell schema --json
+```
+
+在一个终端运行独立看守：
+
+```sh
+./bin/hell --state-dir /tmp/hell-mode-demo watch --json
+```
+
+在另一个终端创建演练任务，将返回的 `data.id` 用作后续 `TASK_ID`：
+
+```sh
+./bin/hell --state-dir /tmp/hell-mode-demo arm \
+  --goal '演练：验收应当失败' \
+  --verify-json '["sh","-c","exit 1"]' \
+  --deadline +10m --interval 5s --max-attempts 3 --window 1m \
+  --channel log --yes --json
+
+./bin/hell --state-dir /tmp/hell-mode-demo run TASK_ID --json --no-input -- sh -c 'echo agent-finished'
+./bin/hell --state-dir /tmp/hell-mode-demo status TASK_ID --json
+./bin/hell --state-dir /tmp/hell-mode-demo takeover TASK_ID --json
+```
+
+示例中的验收故意失败，`run` 返回退出码 `3`；`log` 通道只记录演练结果，不发送真实通知。看守与任务共享状态目录，当前本地版本无法覆盖整机断电或休眠。
+
+完整命令、JSON 输入、退出码与 Agent 用法见 [CLI 契约](docs/cli.md)。
 
 ## 一个体系，五个组成
 
@@ -35,7 +69,7 @@ flowchart TD
 
 CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。所有入口共用看守中的任务状态和验收规则，计时与重复通知由常驻程序持续执行。
 
-你可以直接使用 CLI，也可以向 Agent 说：「修完这个问题，测试必须通过。我去睡了，没完成就叫醒我。」Skill 协助整理验收条件、截止时间和叫人策略，经本人确认后布防；后续监看独立于 Agent 对话运行。
+CLI 可直接使用；`hell setup` 可导出供审阅的 Claude Code hooks 配置片段和 Agent Skill。Skill 协助整理验收条件、截止时间和叫人策略，经本人确认后布防；后续监看独立于 Agent 对话运行。导出操作会保留现有宿主配置，实际合并与宿主实机验证由使用者完成。
 
 ## 一段虚构的地狱剧情
 
@@ -77,9 +111,9 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。所
 
 「一定把人叫醒」是夸张设定。关机、网络、系统权限、设备设置和运营商都会影响通知触达，实验中的渠道表现须通过实机演练验证。
 
-## 首版打算怎么做
+## 当前实现
 
-首版交付一个 CLI、一个 skill、一个 Agent 宿主适配器、一个常在线看守和一个手机通道，跑通以下流程：
+当前代码提供以下使用路径：
 
 1. CLI 或 skill 绑定目标、验收命令、截止时间与叫人策略，由本人确认布防。
 2. 任务包装器提供执行结果与心跳，首个宿主的 hooks 补充生命周期事件；一轮响应结束会触发核对，目标是否达成由验收决定。
@@ -87,7 +121,9 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。所
 4. 本人通过 CLI 或受保护的详情入口接管、限时暂缓、解除布防或重新验收。
 5. 用演练模式验证重启恢复、重复事件、通知失败，以及 Agent 停止后看守仍可叫人。
 
-首个手机通道优先验证 [Pushover Emergency](https://pushover.net/api#priority)。它提供重复通知与回执；这只是候选能力，尚未接入或完成设备验收。技术方案见 [MVP 设计](docs/mvp.md)。
+通知实现包括默认 `log` 演练通道、[Pushover Emergency](https://pushover.net/api#priority) 适配器，以及显式注册的子进程插件。Pushover 的请求与取消已通过本地 HTTP 回归，尚未进行真实手机验收。
+
+插件使用带版本号的 JSON/stdin/stdout 协议，支持 `describe`、`notify` 和 `cancel`；示例插件与 Go 协议类型随仓库提供，其他语言也可实现。注册前可预览 manifest，插件日志与 CLI JSON 结果分离。见 [插件开发](docs/plugins.md)。
 
 后续按宿主分别提供插件安装包；MCP 在确有远程工具调用需求时加入。
 
@@ -95,6 +131,8 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。所
 
 - [玩法脑暴](docs/brainstorm.md)：把地狱程度拉满，再区分哪些值得做。
 - [MVP 设计](docs/mvp.md)：领域关系、触发条件、接管语义与验收场景。
+- [CLI 契约](docs/cli.md)：人和 Agent 共用的 help、schema、输入输出与退出码。
+- [插件开发](docs/plugins.md)：manifest、子进程协议、能力声明与示例。
 - [路线图](docs/roadmap.md)：从可演练的叫人链路走到电话和房间联动。
 - [领域术语](CONTEXT.md)：统一目标、布防、告警与接管的含义。
 
