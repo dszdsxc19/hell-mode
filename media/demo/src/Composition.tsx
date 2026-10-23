@@ -16,7 +16,7 @@ const muted = "#929b9e";
 const orange = "#ff784f";
 const green = "#a4d6b3";
 const chinese =
-  "仅供娱乐本地模拟Agent没干完你也别想睡验收未通过独立看守重复提醒番茄失踪人类暂不提供服务约定时间已到人类尚未返回是否回来由你决定你回来了任务和问题保存在这里需要人的事情请保存并等待实际结果时间经过剪辑";
+  "仅供娱乐本地模拟Agent今晚交给它你把任务派了出去你在等它验收未通过它在等你现在谁在等谁番茄失踪人类暂不提供服务时间到了仍然安静人类尚未返回你回来了任务和问题保存在这里需要人的事情请保存并等待实际结果时间经过剪辑";
 
 export const HellMode: React.FC = () => {
   const frame = useCurrentFrame();
@@ -39,28 +39,28 @@ export const HellMode: React.FC = () => {
   }, [fontHandle]);
 
   const stage =
-    frame < 75 ? 0 : frame < 195 ? 1 : frame < 285 ? 2 : frame < 375 ? 3 : 4;
-  const starts = [0, 75, 195, 285, 375];
+    frame < 90 ? 0 : frame < 210 ? 1 : frame < 360 ? 2 : frame < 420 ? 3 : 4;
+  const starts = [0, 90, 210, 360, 420];
   const attemptCount =
-    frame < 150 ? 0 : frame < 175 ? 1 : capture.attempts.length;
+    frame < 210 ? 0 : frame < 255 ? 1 : capture.attempts.length;
   const headline = [
-    "Agent 没干完，",
-    "验收未通过。",
+    "今晚交给它。",
+    "你在等它。",
+    "它在等你。",
     "番茄失踪。",
-    "时间到了。",
     "你回来了。",
   ][stage];
   const subtitle = [
-    "你也别想睡。",
-    "独立看守，重复提醒。",
-    "人类暂不提供服务。",
-    "是否回来，由你决定。",
+    "你把任务派了出去。",
+    "验收未通过。",
+    "现在，谁在等谁？",
+    frame < 405 ? "人类暂不提供服务。" : "时间到了。仍然安静。",
     "任务和问题保存在这里。",
   ][stage];
   const lines = [
-    { at: 75, text: "$ hell run TASK_ID -- agent", color: muted },
-    { at: 90, text: `  ${capture.agent_output}`, color: ink },
-    { at: 105, text: `  agent exit ${capture.child_exit_code}`, color: green },
+    { at: 60, text: "$ hell run TASK_ID -- agent", color: muted },
+    { at: 85, text: `  ${capture.agent_output}`, color: ink },
+    { at: 100, text: `  agent exit ${capture.child_exit_code}`, color: green },
     { at: 120, text: `  verdict: ${capture.verdict}`, color: orange },
     {
       at: 135,
@@ -68,30 +68,30 @@ export const HellMode: React.FC = () => {
       color: orange,
     },
     ...capture.attempts.map((attempt, index) => ({
-      at: 150 + index * 25,
+      at: 210 + index * 45,
       text: `  watch → log [${attempt.number}/${capture.max_attempts}] ${attempt.state}`,
       color: orange,
     })),
-    { at: 195, text: "$ hell vanish --for 100ms", color: ink },
-    { at: 212, text: "  番茄失踪已开启。", color: ink },
-    { at: 227, text: "  人类暂不提供服务。", color: ink },
-    { at: 242, text: "  需要人的事情，请保存并等待。", color: muted },
-    { at: 285, text: "$ hell presence --json", color: ink },
-    { at: 300, text: `  mode: ${capture.after_timer.mode}`, color: ink },
-    { at: 315, text: "  人类尚未返回。", color: muted },
-    { at: 375, text: "$ hell back", color: ink },
-    { at: 390, text: "  你回来了。", color: ink },
-    { at: 405, text: "  任务和问题保存在这里。", color: muted },
-    { at: 420, text: `  quiet: ${capture.back.quiet}`, color: muted },
+    { at: 360, text: "$ hell vanish --for 100ms", color: ink },
+    { at: 369, text: "  番茄失踪已开启。", color: ink },
+    { at: 375, text: "  人类暂不提供服务。", color: ink },
+    { at: 381, text: "  需要人的事情，请保存并等待。", color: muted },
+    { at: 390, text: "$ hell presence --json", color: ink },
+    { at: 398, text: `  mode: ${capture.after_timer.mode}`, color: ink },
+    { at: 406, text: "  人类尚未返回。", color: muted },
+    { at: 420, text: "$ hell back", color: ink },
+    { at: 432, text: "  你回来了。", color: ink },
+    { at: 441, text: "  任务和问题保存在这里。", color: muted },
+    { at: 450, text: `  quiet: ${capture.back.quiet}`, color: muted },
     {
-      at: 435,
+      at: 459,
       text: `  reminders: ${capture.back.reminders_after_wait}`,
       color: muted,
     },
-    { at: 450, text: "$ hell end", color: ink },
+    { at: 468, text: "$ hell end", color: ink },
   ];
 
-  if (frame >= 465) {
+  if (frame >= 480) {
     return (
       <AbsoluteFill
         style={{
@@ -170,11 +170,11 @@ export const HellMode: React.FC = () => {
           </div>
           <div
             style={{
-              fontSize: stage === 0 ? 60 : 34,
+              fontSize: 34,
               lineHeight: 1.6,
               marginTop: 8,
-              color: stage === 0 ? ink : muted,
-              fontWeight: stage === 0 ? 700 : 500,
+              color: muted,
+              fontWeight: 500,
             }}
           >
             {subtitle}
@@ -197,10 +197,10 @@ export const HellMode: React.FC = () => {
             <div style={{ width: 1, backgroundColor: "#30383b" }} />
             <div>
               <div style={{ fontSize: 16, color: muted, letterSpacing: 2 }}>
-                {stage >= 2 ? "HUMAN" : "REMINDERS"}
+                {stage >= 3 ? "HUMAN" : "REMINDERS"}
               </div>
               <div style={{ fontSize: 26, marginTop: 9 }}>
-                {stage >= 2
+                {stage >= 3
                   ? stage === 4
                     ? capture.back.mode
                     : capture.vanish.mode
@@ -254,7 +254,7 @@ export const HellMode: React.FC = () => {
               lineHeight: 1.8,
             }}
           >
-            {frame < 75 ? (
+            {frame < 60 ? (
               <>
                 <div style={{ color: muted }}>$ hell arm --channel log</div>
                 <div style={{ color: green, marginTop: 12 }}>
@@ -309,7 +309,7 @@ export const HellMode: React.FC = () => {
           style={{
             height: 3,
             backgroundColor: orange,
-            width: `${interpolate(frame, [0, 464], [0, 100])}%`,
+            width: `${interpolate(frame, [0, 479], [0, 100])}%`,
           }}
         />
       </div>
