@@ -41,19 +41,49 @@
 
 ## 持续质疑对话
 
+实际对话的加载方式、示例与退出指令见 [质疑模式指南](challenge.md)。本节约定 CLI 的输入与返回值。
+
 ```sh
 hell challenge '这个产品真的有人需要吗？'
 hell challenge '这个产品真的有人需要吗？' --json
 hell challenge
 ```
 
-`challenge [TOPIC]` 返回 `hell-challenge` skill 的完整规则与可选话题。JSON 的 `data` 包含 `skill`、`topic`、`instructions` 和 `host_required: true`。请当前 Agent 加载 `instructions`，把 `topic` 作为待讨论的用户主张，开始追问；省略话题时 `topic` 是空字符串，Agent 沿用当前对话，确实没有话题时才询问。
+`challenge [TOPIC]` 返回 `hell-challenge` skill 的完整规则与可选话题，`data` 字段如下：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `skill` | string | 固定为 `hell-challenge`。 |
+| `topic` | string | 原样保留传入的话题；省略时为空字符串。 |
+| `instructions` | string | 随 CLI 嵌入的完整 `SKILL.md`，含 frontmatter。 |
+| `host_required` | boolean | 固定为 `true`，提问与后续回答由宿主 Agent 执行。 |
+
+请当前 Agent 加载 `instructions`，把 `topic` 作为待讨论的用户主张，开始追问。省略话题时，Agent 沿用当前对话，确实没有话题时才询问。
 
 普通输出适合复制给 Agent，JSON 适合由 Agent 工具读取。话题作为单个参数传入，含空格时使用引号；显式传入空白话题或多个位置参数返回退出码 2。
 
-Agent 每轮优先追问一个影响结论的问题，依据回答继续检查。已有充分论证或明确价值取舍时接受；信息不足时保留待验证假设。用户要求暂停、结束或切回执行时照做。对话上下文由宿主保留。
+普通输出包含加载提示、同一份 skill 原文和可选话题。命令不调用模型、启动交互聊天或创建状态目录，`--state-dir` 对该命令无影响。对话上下文由宿主保留。
 
-该命令只输出规则，不调用模型、启动交互聊天或创建状态目录；无需看守、事件令牌或通知凭据。`hell setup` 同时导出 `.agents/skills/hell-challenge/SKILL.md`，可按宿主的 skill 安装方式加载，独立于通知 hooks 使用。
+`hell setup` 可导出同一份 `.agents/skills/hell-challenge/SKILL.md`；导出后的宿主安装与更新见 [安装说明](install.md#安装质疑-skill)。
+
+## 导出集成文件
+
+```sh
+hell setup --output ./integration --dry-run --json
+hell setup --output ./integration --yes --json
+```
+
+`--output` 必填。未传 `--yes` 或显式传入 `--dry-run` 时，仅返回导出计划。`--dry-run` 优先于 `--yes`，预览不创建目录。
+
+JSON 的 `data` 包含绝对路径 `output`、布尔值 `dry_run`、路径到文件内容的映射 `files`，以及固定为 `false` 的 `live_settings_modified`。文件清单固定为：
+
+| 相对输出路径 | 用途 |
+| --- | --- |
+| `.claude/settings.hell-mode.json` | Claude Code 监看 hooks 的待合并片段。 |
+| `.agents/skills/hell-mode/SKILL.md` | 任务监看 skill。 |
+| `.agents/skills/hell-challenge/SKILL.md` | 质疑对话 skill。 |
+
+实际导出时，任何目标文件已存在则返回冲突与退出码 5，不覆盖文件；写入路径中的子目录为符号链接时也会拒绝。预览不检查这些写入条件。`setup` 只导出文件，宿主发现目录和已有设置合并由安装步骤处理；它不会全局安装 skill 或自动修改 `.claude/settings.json`。只使用质疑模式时，可仅安装对应 skill。
 
 ## 创建目标契约
 
@@ -126,7 +156,7 @@ hell end
 
 验收在有时限的执行租约内进行，多个看守不会重复领取同一请求。验收进程结果丢失时记录 unknown。当前每个看守串行处理验收和发送，长检查会延后该进程的后续扫描；首版以单任务演练为主。
 
-`hell setup --output DIR --dry-run --json` 预览 Claude Code 配置片段、`hell-mode` 与 `hell-challenge` 两份 skill，`--yes` 才导出文件。导出文件不会覆盖已有文件，也不会合并现有 `.claude/settings.json`。使用监看 hooks 时，使用者须审阅并合并片段；质疑 skill 可单独加载。真实宿主 hooks 验收尚未完成。
+`hell setup` 返回的 hooks 片段属于 [导出集成文件](#导出集成文件)。使用监看 hooks 时，使用者须审阅并合并片段；真实宿主 hooks 验收尚未完成。
 
 当前事件令牌限制的是事件入口，管理命令依赖操作系统用户权限。同一用户下的 Agent 可以访问该用户文件，这不是安全沙箱；独立管理授权尚未实现。
 

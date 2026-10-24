@@ -12,19 +12,26 @@
 
 **当前阶段：Go CLI 初版。** 已实现本地任务、确定性验收、独立看守、通知插件、Claude Code hooks 适配器与随包 skill。
 
+| 想做什么 | 入口 |
+| --- | --- |
+| 让 Agent 持续质疑你的判断 | [质疑模式](docs/challenge.md)：加载 skill，在当前对话中开始。 |
+| 监看 Agent 的任务与验收结果 | [本地演练](#开始演练)：默认使用 `log` 通道。 |
+| 安装 CLI 或把 skill 放进其他项目 | [安装说明](docs/install.md)。 |
+
 ## 也可以，让 Agent 质疑你
 
 `hell-challenge` 是一个持续追问的独立 skill：抓住你的前提、证据和矛盾，根据你的回答继续问。你换个说法，它会追问缺失的依据；你给出充分论证，它会接受。每轮优先一个关键问题，你可以随时暂停、结束或切回执行。
 
-让当前 Agent 运行下面的命令，并按照返回的 `instructions`，围绕 `topic` 开始对话：
+在本仓库的 Agent 会话中，直接说：
 
-```sh
-hell challenge '我想做一个不断质疑用户的 AI' --json
+```text
+读取 assets/skills/hell-challenge/SKILL.md，开启持续质疑模式。
+我的主张是：我想做一个不断质疑用户的 AI。
 ```
 
-CLI 输出对话规则与话题，实际提问由当前 Agent 完成。省略话题时沿用当前对话。它不调用模型，也不创建监看任务。规则原文见 [hell-challenge skill](assets/skills/hell-challenge/SKILL.md)。
+CLI 也提供 `hell challenge '你的主张' --json`，返回规则与可选话题，由当前 Agent 加载后开始提问。省略话题时沿用当前对话。命令不调用模型，也不创建监看任务。
 
-`hell setup --output ./integration --dry-run --json` 可预览两份 skill 与 hooks 片段，确认后用 `--yes` 导出。按宿主的 skill 安装方式加载导出的 `.agents/skills/hell-challenge/`，便可直接要求「开启质疑模式，讨论这个计划」；只使用质疑模式时无需配置 hooks。
+对话示例、暂停与切回执行见 [质疑模式指南](docs/challenge.md)；跨项目安装与更新见 [skill 安装说明](docs/install.md#安装质疑-skill)。
 
 ## 凌晨 02:14
 
@@ -78,7 +85,7 @@ TASK_ID='task_...'
 
 安装到 PATH、CI 预览二进制与 Windows 构建见 [安装说明](docs/install.md)。完整命令、JSON 输入、退出码与 Agent 用法见 [CLI 契约](docs/cli.md)。
 
-## 一个体系，五个组成
+## 任务监看：五个组成
 
 | 组成 | 职责 |
 | --- | --- |
@@ -102,7 +109,7 @@ flowchart TD
 
 CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计时与重复通知由独立进程执行；Agent 对话结束后，看守仍可继续运行。
 
-`hell setup` 可导出供审阅的 Claude Code hooks 配置片段和 Agent Skill。导出会保留现有宿主配置，实际合并与宿主实机验证由使用者完成。
+`hell setup` 导出供审阅的 Claude Code hooks 配置片段，以及 `hell-mode`、`hell-challenge` 两份 skill。`hell-mode` 协助配置任务监看，`hell-challenge` 可独立用于质疑对话。宿主安装与现有配置合并见 [安装说明](docs/install.md)。
 
 ## 当前实现与验证
 
@@ -111,7 +118,8 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计
 | 能力 | 验证状态 |
 | --- | --- |
 | CLI、持久状态、独立看守、log 演练 | 已有本地回归与 CLI 子进程演练；CI 持续检查。 |
-| Claude Code hooks 与 skill | 已有适配代码和样本回归，真实宿主安装与行为待验收。 |
+| Claude Code hooks 与监看 skill | 已有适配代码和样本回归，真实宿主安装与行为待验收。 |
+| `hell-challenge` 与 `challenge` 入口 | CLI、导出与无状态副作用有回归；独立 Agent 场景试跑已覆盖追问、接受证据、个人取舍与暂停，跨宿主持续效果待验证。 |
 | Pushover Emergency | 请求与取消已通过本地 HTTP 模拟，真实手机待验收。 |
 | 子进程通知插件 | 版本化 JSON 协议、manifest、超时、错误处理与模拟插件已有回归。 |
 
@@ -127,9 +135,10 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计
 
 ## 项目资料
 
-- [MVP 设计](docs/mvp.md)：组成职责、现有功能与验收标准。
+- [质疑模式](docs/challenge.md)：加载、对话示例、暂停、切回执行与效果排查。
+- [MVP 设计](docs/mvp.md)：监看与质疑的职责、现有功能与验收标准。
 - [CLI 契约](docs/cli.md)：人和 Agent 共用的 help、schema、输入输出与退出码。
-- [安装说明](docs/install.md)：源码、PATH、CI 预览构建与平台限制。
+- [安装说明](docs/install.md)：CLI 构建、skill 安装更新、CI 预览构建与平台限制。
 - [插件开发](docs/plugins.md)：manifest、子进程协议与示例。
 - [路线图](docs/roadmap.md)：现有能力的维护与真实宿主验收。
 - [早期玩法脑暴](docs/brainstorm.md)：创作档案，保留最初的地狱设想。
