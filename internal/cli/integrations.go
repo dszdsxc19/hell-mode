@@ -20,7 +20,7 @@ import (
 func (a *app) setupCommand() *cobra.Command {
 	var output string
 	var yes, dry bool
-	cmd := &cobra.Command{Use: "setup", Short: "Export Claude Code hook configuration and an Agent Skill for review", Long: `Writes a settings fragment and .agents/skills/hell-mode/SKILL.md under the
+	cmd := &cobra.Command{Use: "setup", Short: "Export Claude Code hook configuration and Agent Skills for review", Long: `Writes a settings fragment and the hell-mode and hell-challenge skills under the
 explicit output directory. Existing files and symlinked child directories are
 refused. Nothing is merged into .claude/settings.json or installed globally.
 The hook requires hell on PATH and a process launched via hell run.
@@ -35,7 +35,7 @@ Without --yes (or with --dry-run), this command only prints a plan.`, Example: "
 		hook := map[string]any{"type": "command", "command": "hell hook claude-code", "timeout": 30}
 		settings := map[string]any{"hooks": map[string]any{"Stop": []any{map[string]any{"hooks": []any{hook}}}, "StopFailure": []any{map[string]any{"hooks": []any{hook}}}, "Notification": []any{map[string]any{"matcher": "permission_prompt|idle_prompt", "hooks": []any{hook}}}}}
 		raw, _ := json.MarshalIndent(settings, "", "  ")
-		files := map[string]string{".claude/settings.hell-mode.json": string(raw) + "\n", ".agents/skills/hell-mode/SKILL.md": assets.Skill}
+		files := map[string]string{".claude/settings.hell-mode.json": string(raw) + "\n", ".agents/skills/hell-mode/SKILL.md": assets.Skill, ".agents/skills/hell-challenge/SKILL.md": assets.ChallengeSkill}
 		a.data = map[string]any{"dry_run": dry || !yes, "output": root, "files": files, "live_settings_modified": false}
 		if dry || !yes {
 			return nil

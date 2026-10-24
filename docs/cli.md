@@ -39,6 +39,22 @@
 
 出错后先检查 `error.code` 与返回的任务标识；重新查询已有任务，避免重复创建任务或重发结果不明的通知。
 
+## 持续质疑对话
+
+```sh
+hell challenge '这个产品真的有人需要吗？'
+hell challenge '这个产品真的有人需要吗？' --json
+hell challenge
+```
+
+`challenge [TOPIC]` 返回 `hell-challenge` skill 的完整规则与可选话题。JSON 的 `data` 包含 `skill`、`topic`、`instructions` 和 `host_required: true`。请当前 Agent 加载 `instructions`，把 `topic` 作为待讨论的用户主张，开始追问；省略话题时 `topic` 是空字符串，Agent 沿用当前对话，确实没有话题时才询问。
+
+普通输出适合复制给 Agent，JSON 适合由 Agent 工具读取。话题作为单个参数传入，含空格时使用引号；显式传入空白话题或多个位置参数返回退出码 2。
+
+Agent 每轮优先追问一个影响结论的问题，依据回答继续检查。已有充分论证或明确价值取舍时接受；信息不足时保留待验证假设。用户要求暂停、结束或切回执行时照做。对话上下文由宿主保留。
+
+该命令只输出规则，不调用模型、启动交互聊天或创建状态目录；无需看守、事件令牌或通知凭据。`hell setup` 同时导出 `.agents/skills/hell-challenge/SKILL.md`，可按宿主的 skill 安装方式加载，独立于通知 hooks 使用。
+
 ## 创建目标契约
 
 `arm` 接受独立 flags 或 `--file FILE`，`--file -` 读取 stdin。两种输入方式互斥，未知 JSON 字段、null 值和尾随对象会被拒绝；可选字段直接省略。验收命令为 argv 数组；需要 shell 语义时显式传入 shell。
@@ -110,7 +126,7 @@ hell end
 
 验收在有时限的执行租约内进行，多个看守不会重复领取同一请求。验收进程结果丢失时记录 unknown。当前每个看守串行处理验收和发送，长检查会延后该进程的后续扫描；首版以单任务演练为主。
 
-`hell setup --output DIR --dry-run --json` 预览 Claude Code 配置片段与 skill，`--yes` 才导出文件。导出文件不会覆盖已有文件，也不会合并现有 `.claude/settings.json`。使用者须审阅并合并片段；真实宿主验收尚未完成。
+`hell setup --output DIR --dry-run --json` 预览 Claude Code 配置片段、`hell-mode` 与 `hell-challenge` 两份 skill，`--yes` 才导出文件。导出文件不会覆盖已有文件，也不会合并现有 `.claude/settings.json`。使用监看 hooks 时，使用者须审阅并合并片段；质疑 skill 可单独加载。真实宿主 hooks 验收尚未完成。
 
 当前事件令牌限制的是事件入口，管理命令依赖操作系统用户权限。同一用户下的 Agent 可以访问该用户文件，这不是安全沙箱；独立管理授权尚未实现。
 

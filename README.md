@@ -12,6 +12,20 @@
 
 **当前阶段：Go CLI 初版。** 已实现本地任务、确定性验收、独立看守、通知插件、Claude Code hooks 适配器与随包 skill。
 
+## 也可以，让 Agent 质疑你
+
+`hell-challenge` 是一个持续追问的独立 skill：抓住你的前提、证据和矛盾，根据你的回答继续问。你换个说法，它会追问缺失的依据；你给出充分论证，它会接受。每轮优先一个关键问题，你可以随时暂停、结束或切回执行。
+
+让当前 Agent 运行下面的命令，并按照返回的 `instructions`，围绕 `topic` 开始对话：
+
+```sh
+hell challenge '我想做一个不断质疑用户的 AI' --json
+```
+
+CLI 输出对话规则与话题，实际提问由当前 Agent 完成。省略话题时沿用当前对话。它不调用模型，也不创建监看任务。规则原文见 [hell-challenge skill](assets/skills/hell-challenge/SKILL.md)。
+
+`hell setup --output ./integration --dry-run --json` 可预览两份 skill 与 hooks 片段，确认后用 `--yes` 导出。按宿主的 skill 安装方式加载导出的 `.agents/skills/hell-challenge/`，便可直接要求「开启质疑模式，讨论这个计划」；只使用质疑模式时无需配置 hooks。
+
 ## 凌晨 02:14
 
 ```text

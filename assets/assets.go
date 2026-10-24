@@ -5,3 +5,6 @@ import _ "embed"
 
 //go:embed skills/hell-mode/SKILL.md
 var Skill string
+
+//go:embed skills/hell-challenge/SKILL.md
+var ChallengeSkill string
