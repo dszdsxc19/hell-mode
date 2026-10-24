@@ -66,3 +66,28 @@ func TestPushoverRejectsHTTPAndInvalidReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestPushoverPersonalInvitationUsesNormalPriorityWithoutRetries(t *testing.T) {
+	t.Setenv("HELL_PUSHOVER_APP_TOKEN", "test-app")
+	t.Setenv("HELL_PUSHOVER_USER_KEY", "test-user")
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if r.Form.Get("priority") != "0" || r.Form.Has("retry") || r.Form.Has("expire") {
+			t.Errorf("personal invitation must not create an emergency: %v", r.Form)
+		}
+		if r.Form.Get("message") != "a new invitation is ready" {
+			t.Error("missing invitation notice")
+		}
+		_, _ = w.Write([]byte(`{"status":1}`))
+	}))
+	defer server.Close()
+	d := Dispatcher{Endpoint: server.URL, Client: server.Client()}
+	result, err := d.Call(context.Background(), "pushover", "notify", protocol.Notification{Priority: "normal", Body: "a new invitation is ready", ExpiresAt: time.Now().Add(time.Minute)})
+	if err != nil || result.State != "sent" || result.Receipt != "" || calls != 1 {
+		t.Fatalf("result=%+v err=%v calls=%d", result, err, calls)
+	}
+}

@@ -10,7 +10,7 @@ import (
 )
 
 func TestCorruptOrFutureStateIsNotOverwritten(t *testing.T) {
-	for _, raw := range []string{`{"version":3}`, `{"version":1,"tasks":null}`, `{"version":2,"presence":{"mode":"unknown"}}`, `{"version":2,"presence":{"mode":"away"}}`, `not-json`} {
+	for _, raw := range []string{`{"version":4}`, `null`, `[]`, `{}`, `{"version":3}`, `{"version":1,"tasks":null}`, `{"version":3,"engagements":null}`, `{"version":3,"engagements":{"bad":null}}`, `{"version":2,"memory":null}`, `{"version":2,"presence":{"mode":"unknown"}}`, `{"version":2,"presence":{"mode":"away"}}`, `not-json`} {
 		t.Run(raw, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "state.db")
@@ -72,7 +72,7 @@ func TestLegacyStateMigratesOnWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Version != 2 || st.Presence.Mode != "available" || st.Tasks["task_old"].Quiet || st.Tasks["task_old"].Verdict != "unmet" {
+	if st.Version != 3 || st.Presence.Mode != "available" || st.Tasks["task_old"].Quiet || st.Tasks["task_old"].Verdict != "unmet" || st.Engagements == nil || st.Memory.Text != "" {
 		t.Fatalf("legacy state changed semantics: %+v", st)
 	}
 	if err := store.Update(func(st *State) error { return nil }); err != nil {
@@ -88,7 +88,7 @@ func TestLegacyStateMigratesOnWrite(t *testing.T) {
 		if err := json.Unmarshal(tx.Bucket([]byte("state")).Get([]byte("v1")), &persisted); err != nil {
 			return err
 		}
-		if persisted.Version != 2 || persisted.Presence.Mode != "available" {
+		if persisted.Version != 3 || persisted.Presence.Mode != "available" || persisted.Engagements == nil {
 			t.Fatalf("migration not persisted: %+v", persisted)
 		}
 		return nil

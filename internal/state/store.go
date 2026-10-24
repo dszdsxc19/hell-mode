@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dszdsxc19/hell-mode/internal/model"
@@ -15,13 +16,15 @@ import (
 
 // State is versioned so an incompatible binary refuses to silently overwrite future data.
 type State struct {
-	Version    int                          `json:"version"`
-	Tasks      map[string]*model.Task       `json:"tasks"`
-	Tokens     map[string]string            `json:"tokens"`
-	Events     map[string]bool              `json:"events"`
-	Plugins    map[string]protocol.Manifest `json:"plugins"`
-	WatchdogAt time.Time                    `json:"watchdog_at"`
-	Presence   model.Presence               `json:"presence"`
+	Version     int                          `json:"version"`
+	Tasks       map[string]*model.Task       `json:"tasks"`
+	Tokens      map[string]string            `json:"tokens"`
+	Events      map[string]bool              `json:"events"`
+	Plugins     map[string]protocol.Manifest `json:"plugins"`
+	WatchdogAt  time.Time                    `json:"watchdog_at"`
+	Presence    model.Presence               `json:"presence"`
+	Memory      model.PersonalMemory         `json:"memory"`
+	Engagements map[string]*model.Engagement `json:"engagements"`
 }
 
 type Store struct{ Dir string }
@@ -75,7 +78,7 @@ func (s Store) Snapshot() (*State, error) {
 }
 
 func empty() *State {
-	return &State{Version: 2, Tasks: map[string]*model.Task{}, Tokens: map[string]string{}, Events: map[string]bool{}, Plugins: map[string]protocol.Manifest{}, Presence: model.Presence{Mode: "available"}}
+	return &State{Version: 3, Tasks: map[string]*model.Task{}, Tokens: map[string]string{}, Events: map[string]bool{}, Plugins: map[string]protocol.Manifest{}, Presence: model.Presence{Mode: "available"}, Engagements: map[string]*model.Engagement{}}
 }
 
 // load rejects corrupt or future state before any caller can overwrite it.
@@ -86,16 +89,26 @@ func load(tx *bolt.Tx) (*State, error) {
 		return st, nil
 	}
 	if raw := bucket.Get([]byte("v1")); raw != nil {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil || fields == nil || fields["version"] == nil {
+			return nil, fmt.Errorf("decode state: expected a versioned object")
+		}
+		st.Version = 0
 		if err := json.Unmarshal(raw, st); err != nil {
 			return nil, fmt.Errorf("decode state: %w", err)
 		}
+		if st.Version == 3 && fields["engagements"] == nil {
+			return nil, fmt.Errorf("state is missing engagements")
+		}
+		if strings.TrimSpace(string(fields["memory"])) == "null" || strings.TrimSpace(string(fields["presence"])) == "null" {
+			return nil, fmt.Errorf("state contains a null record")
+		}
 	}
-	if st.Version != 1 && st.Version != 2 {
+	if st.Version != 1 && st.Version != 2 && st.Version != 3 {
 		return nil, fmt.Errorf("unsupported state version %d", st.Version)
 	}
-	// v1 omitted human availability and per-task silence. The next write stores v2,
-	// which an older binary refuses rather than dropping these boundaries.
-	st.Version = 2
+	// Older binaries refuse v3 instead of silently dropping memory or conversations.
+	st.Version = 3
 	if st.Presence.Mode == "" {
 		st.Presence.Mode = "available"
 	}
@@ -108,12 +121,40 @@ func load(tx *bolt.Tx) (*State, error) {
 	default:
 		return nil, fmt.Errorf("state contains an invalid presence mode")
 	}
-	if st.Tasks == nil || st.Tokens == nil || st.Events == nil || st.Plugins == nil {
+	if st.Tasks == nil || st.Tokens == nil || st.Events == nil || st.Plugins == nil || st.Engagements == nil {
 		return nil, fmt.Errorf("state is missing required collections")
 	}
 	for id, t := range st.Tasks {
 		if t == nil || t.ID != id {
 			return nil, fmt.Errorf("state contains an invalid task record")
+		}
+	}
+	for id, engagement := range st.Engagements {
+		if engagement == nil || engagement.ID != id || id == "" || engagement.Every <= 0 || engagement.Timeout <= 0 || engagement.Timeout > 5*time.Minute || len(engagement.Agent) == 0 || engagement.Agent[0] == "" || engagement.Workdir == "" || engagement.Channel == "" || engagement.CreatedAt.IsZero() || engagement.NextAt.IsZero() || engagement.Rounds == nil {
+			return nil, fmt.Errorf("state contains an invalid engagement record")
+		}
+		unresolved := 0
+		seen := map[string]bool{}
+		for _, round := range engagement.Rounds {
+			if round.ID == "" || seen[round.ID] || round.StartedAt.IsZero() {
+				return nil, fmt.Errorf("state contains an invalid engagement round")
+			}
+			seen[round.ID] = true
+			switch round.State {
+			case "generating":
+				if round.LeaseUntil.IsZero() {
+					return nil, fmt.Errorf("state contains an invalid generation lease")
+				}
+				unresolved++
+			case "waiting":
+				unresolved++
+			case "answered", "skipped", "failed", "unknown":
+			default:
+				return nil, fmt.Errorf("state contains an invalid engagement round state")
+			}
+		}
+		if unresolved > 1 {
+			return nil, fmt.Errorf("state contains multiple unresolved engagement rounds")
 		}
 	}
 	return st, nil

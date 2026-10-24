@@ -176,6 +176,7 @@ critical alerts or interrupt real sleep.`, Example: `  hell schema --json
 	root.AddCommand(a.armCommand(), a.runCommand(), a.statusCommand(), a.verifyCommand(), a.eventCommand(), a.watchCommand(), a.actionCommand("takeover"), a.actionCommand("snooze"), a.actionCommand("disarm"), a.pluginCommand(), a.setupCommand(), a.hookCommand(), a.doctorCommand())
 	root.AddCommand(a.presenceCommand(), a.vanishCommand(), a.backCommand(), a.endCommand())
 	root.AddCommand(a.challengeCommand())
+	root.AddCommand(a.engageCommand())
 	return root
 }
 

@@ -60,19 +60,26 @@ func (d Dispatcher) pushover(ctx context.Context, method string, n protocol.Noti
 	if method == "cancel" {
 		endpoint = base + "/1/receipts/" + url.PathEscape(n.Receipt) + "/cancel.json"
 	} else {
-		expire := int(time.Until(n.ExpiresAt).Seconds())
-		if expire < 1 {
+		if !time.Now().Before(n.ExpiresAt) {
 			return nil, fmt.Errorf("notification window expired")
-		}
-		if expire > 10800 {
-			expire = 10800
 		}
 		values.Set("user", user)
 		values.Set("title", n.Title)
 		values.Set("message", n.Body)
-		values.Set("priority", "2")
-		values.Set("retry", "30")
-		values.Set("expire", fmt.Sprint(expire))
+		if n.Priority == "normal" {
+			values.Set("priority", "0")
+		} else {
+			expire := int(time.Until(n.ExpiresAt).Seconds())
+			if expire < 1 {
+				return nil, fmt.Errorf("notification window expired")
+			}
+			if expire > 10800 {
+				expire = 10800
+			}
+			values.Set("priority", "2")
+			values.Set("retry", "30")
+			values.Set("expire", fmt.Sprint(expire))
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
 	if err != nil {
@@ -100,6 +107,9 @@ func (d Dispatcher) pushover(ctx context.Context, method string, n protocol.Noti
 	}
 	if method == "cancel" {
 		return &protocol.Result{State: "cancelled", Receipt: n.Receipt}, nil
+	}
+	if n.Priority == "normal" {
+		return &protocol.Result{State: "sent"}, nil
 	}
 	if body.Receipt == "" {
 		return nil, fmt.Errorf("pushover accepted response has no receipt; delivery is unknown")

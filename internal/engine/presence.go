@@ -47,6 +47,9 @@ func (e Engine) SetPresence(ctx context.Context, mode string, until time.Time) (
 			for _, t := range st.Tasks {
 				t.Quiet = true
 			}
+			for _, g := range st.Engagements {
+				pauseEngagement(g)
+			}
 		}
 		return nil
 	})

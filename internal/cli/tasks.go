@@ -206,6 +206,8 @@ func (a *app) watchCommand() *cobra.Command {
 This local implementation shares --state-dir with the runner; it cannot monitor
 a powered-off machine remotely. Supervise it externally when experimenting.
 With --json, continuous mode writes one envelope per tick as NDJSON.
+AI conversations generate separately so model latency does not block task scans.
+--once waits for generation and sends before returning.
 end makes this watch exit silently at its next state check. An ended watch
 does not restart when the human returns. No process detaches itself and no
 system service is installed.`, Example: "  hell watch --json\n  hell watch --once --json", Args: args(cobra.NoArgs), RunE: func(cmd *cobra.Command, _ []string) error {
@@ -218,8 +220,34 @@ system service is installed.`, Example: "  hell watch --json\n  hell watch --onc
 			return err
 		}
 		e.WatchEpoch = &started.WatchEpoch
+		watchCtx, cancelWatch := context.WithCancel(cmd.Context())
+		type engagementResult struct {
+			count int
+			err   error
+		}
+		generated := make(chan engagementResult, 1)
+		generating := false
+		defer func() {
+			cancelWatch()
+			if generating {
+				// Cancellation stops the bounded child process before the CLI exits.
+				select {
+				case <-generated:
+				case <-time.After(2 * time.Second):
+				}
+			}
+		}()
 		for {
-			count, err := e.Tick(cmd.Context())
+			if !once && watchCtx.Err() != nil {
+				a.data, a.silent = nil, true
+				return nil
+			}
+			var count int
+			if once {
+				count, err = e.Tick(watchCtx)
+			} else {
+				count, err = e.TickTasks(watchCtx)
+			}
 			if err != nil {
 				return err
 			}
@@ -236,6 +264,25 @@ system service is installed.`, Example: "  hell watch --json\n  hell watch --onc
 				a.silent = true
 				return nil
 			}
+			if generating {
+				select {
+				case result := <-generated:
+					generating = false
+					if result.err != nil {
+						return result.err
+					}
+					count += result.count
+				default:
+				}
+			}
+			if !generating {
+				generating = true
+				go func() {
+					count, err := e.TickEngagements(watchCtx)
+					generated <- engagementResult{count, err}
+				}()
+			}
+			a.data = map[string]any{"attempts_claimed": count, "at": time.Now().UTC(), "stopped": false}
 			if a.json {
 				if err := json.NewEncoder(a.out).Encode(map[string]any{"schema_version": "hell-mode/v1", "ok": true, "command": "hell watch", "data": a.data, "error": nil}); err != nil {
 					return err

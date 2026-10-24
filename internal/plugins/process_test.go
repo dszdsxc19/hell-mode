@@ -37,6 +37,9 @@ func TestPluginProcess(t *testing.T) {
 	if mode == "mismatch" {
 		response.ID = "wrong"
 	}
+	if mode == "normal" {
+		response.Result.State, response.Result.Receipt = "sent", ""
+	}
 	if mode == "env" && os.Getenv("HELL_SECRET_SENTINEL") != "" {
 		os.Exit(7)
 	}
@@ -70,5 +73,24 @@ func TestPluginBoundedProtocolAndEnvironment(t *testing.T) {
 				t.Fatal("invalid plugin response accepted")
 			}
 		})
+	}
+}
+
+func TestNormalInvitationAllowsOneShotPluginResult(t *testing.T) {
+	t.Setenv("HELL_PLUGIN_TEST", "1")
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
+	manifest, err := Validate(protocol.Manifest{ProtocolVersion: protocol.Version, Name: "test", Command: []string{os.Args[0], "-test.run=^TestPluginProcess$", "--", "normal"}, TimeoutMS: 2000, Env: []string{"HELL_PLUGIN_TEST", "GORACE"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, priority := range []string{"normal", ""} {
+		result, err := Call(context.Background(), manifest, "notify", &protocol.Notification{Priority: priority})
+		if priority == "normal" {
+			if err != nil || result.State != "sent" || result.Receipt != "" {
+				t.Fatalf("one-shot send rejected: result=%+v err=%v", result, err)
+			}
+		} else if err == nil {
+			t.Fatal("emergency notification accepted a receipt-less result")
+		}
 	}
 }

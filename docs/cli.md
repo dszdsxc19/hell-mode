@@ -26,7 +26,7 @@
 
 `watch --json` 是持续命令，每个扫描周期输出一行相同信封格式的 NDJSON；`watch --once --json` 返回单个结果。`run --json` 的子进程输出写入私有日志，不混入 stdout。宿主调用的 `hook claude-code` 默认成功时不输出内容，避免向宿主注入控制决定；显式加 `--json` 才输出结果。
 
-所有命令均不弹交互问题。`--no-input` 同时断开被包装子进程的 stdin。`arm`、`plugin add` 的写入需要 `--yes`；`setup` 未传 `--yes` 时只预览。`--yes` 由调用方确认当前授权，skill 不据此推断用户授权。
+所有命令均不弹交互问题。`--no-input` 同时断开被包装子进程的 stdin。`arm`、`engage create`、`plugin add` 的写入需要 `--yes`；`setup` 未传 `--yes` 时只预览。`--yes` 由调用方确认当前授权，skill 不据此推断用户授权。
 
 | 退出码 | 含义 |
 | --- | --- |
@@ -34,7 +34,7 @@
 | 1 | 操作失败、中断或无法确认执行结果。 |
 | 2 | 参数、JSON 或确认条件不满足。 |
 | 3 | 验收未达成或被包装进程失败；分别查看验收结论与 child_exit_code。 |
-| 4 | 任务或插件不存在。 |
+| 4 | 任务、主动对话计划或插件不存在。 |
 | 5 | 状态冲突或事件凭据不匹配。 |
 
 出错后先检查 `error.code` 与返回的任务标识；重新查询已有任务，避免重复创建任务或重发结果不明的通知。
@@ -66,6 +66,47 @@ hell challenge
 
 `hell setup` 可导出同一份 `.agents/skills/hell-challenge/SKILL.md`；导出后的宿主安装与更新见 [安装说明](install.md#安装质疑-skill)。
 
+## 定时主动对话
+
+完整演练与生成器职责见 [主动对话](engage.md)。`engage` 的计划与对话轮保存在状态库，调度由 `watch` 执行，独立于监看任务和 `challenge` 宿主对话。
+
+```sh
+hell engage memory --json
+hell engage memory --file personal-memory.txt --json
+hell engage create --file engagement.json --dry-run --json
+hell engage create --file engagement.json --yes --json
+hell engage list --json
+hell engage show ENGAGEMENT_ID --json
+hell engage reply ENGAGEMENT_ID --round ROUND_ID --text '我的回答' --json
+hell engage skip ENGAGEMENT_ID --round ROUND_ID --json
+hell engage pause ENGAGEMENT_ID --json
+hell engage resume ENGAGEMENT_ID --json
+```
+
+`memory` 无 `--file` 时只读；`--file FILE|-` 替换完整个人记忆，空文件清空。回答使用 `--text` 或 `--file FILE|-`，二者互斥，并绑定明确的 `--round`。原始回答保存到该轮历史，不自动改写个人记忆。
+
+`create` 接受独立 flags 或 `--file FILE|-`，两种方式互斥。JSON 输入为：
+
+```json
+{
+  "focus": "围绕最近的技术取舍，邀请我练习表达",
+  "every": "4h",
+  "at": "+4h",
+  "agent": ["/absolute/path/to/my-ai-adapter"],
+  "workdir": ".",
+  "timeout": "2m",
+  "channel": "log"
+}
+```
+
+`agent` 必填，是本人选定的受信程序与参数；flag 形式为 `--agent-json '["PROGRAM","ARG"]'`。`focus` 可省略，`every` 默认 `4h` 且必须为正，`at` 默认当前时间加 `every`，接受 RFC3339 或 `+duration`，`+0s` 立即到期。`workdir` 默认当前目录，`timeout` 默认 `2m`、最多 `5m`，`channel` 默认 `log`。未知 JSON 字段、null 与尾随对象会被拒绝。
+
+`--dry-run` 优先于 `--yes`，不写状态或调用生成器；缺少 `--yes` 的创建返回 `confirmation_required`。启用后，每次生成读取最新个人记忆和该计划最近至多 10 轮对话；生成器从 stdin 接收 JSON，并返回 `{ "kind": "question|task|skip", "message": "...", "basis": "..." }`。核心直接执行 argv，生成内容不会被作为命令执行。
+
+每个计划最多有一轮待回应，`reply` 或 `skip` 后从当前时间加 `every` 安排下一轮。未回应时保持等待；错过的周期合并，不集中补发。`pause` 停用计划并保留历史，`resume` 要求全局状态为 `available`，按当前时间恢复后续调度；已有待回应轮次仍须先回答或跳过。生成与发送的状态和错误分别保留在 `show` 中。
+
+主动对话通知仅含通用提示与标识，完整内容从 `show` 查看。`log` 模拟发送，Pushover 采用普通优先级且不重复响铃；已注册插件沿用现有通知协议。
+
 ## 导出集成文件
 
 ```sh
@@ -80,7 +121,7 @@ JSON 的 `data` 包含绝对路径 `output`、布尔值 `dry_run`、路径到文
 | 相对输出路径 | 用途 |
 | --- | --- |
 | `.claude/settings.hell-mode.json` | Claude Code 监看 hooks 的待合并片段。 |
-| `.agents/skills/hell-mode/SKILL.md` | 任务监看 skill。 |
+| `.agents/skills/hell-mode/SKILL.md` | 任务监看与主动对话 skill。 |
 | `.agents/skills/hell-challenge/SKILL.md` | 质疑对话 skill。 |
 
 实际导出时，任何目标文件已存在则返回冲突与退出码 5，不覆盖文件；写入路径中的子目录为符号链接时也会拒绝。预览不检查这些写入条件。`setup` 只导出文件，宿主发现目录和已有设置合并由安装步骤处理；它不会全局安装 skill 或自动修改 `.claude/settings.json`。只使用质疑模式时，可仅安装对应 skill。
@@ -128,9 +169,9 @@ hell back
 hell end
 ```
 
-这些动作作用于同一状态目录的全部任务与 hell-mode 通知，不拦截宿主独立发出的通知或权限弹窗。`vanish` 默认 25 分钟，只接受正的 Go duration。它保存全局 `away` 状态，将现有任务设为 `quiet: true`，取消已知回执；运行与验收可以继续，新的等待和失败证据继续保存。失踪期间新建的任务也保持静默。
+这些动作作用于同一状态目录的全部任务、主动对话计划与 hell-mode 通知，不拦截宿主独立发出的通知或权限弹窗。`vanish` 默认 25 分钟，只接受正的 Go duration。它保存全局 `away` 状态，将现有任务设为 `quiet: true`，停用主动对话计划，取消已知回执；运行与验收可以继续，新的等待和失败证据继续保存。失踪期间新建的任务也保持静默。
 
-到达 `until` 后仍是 `away`，没有闹铃、自动返回或补发。只有本人明确执行 `back`，全局状态才恢复为 `available`。旧任务的 `quiet` 保留；本人查看 `status` 后，可明确执行 `run TASK_ID --rearm -- COMMAND...` 开启新一轮监看，沿用原契约与截止时间。回来本身不表示接管任何告警。
+到达 `until` 后仍是 `away`，没有闹铃、自动返回或补发。只有本人明确执行 `back`，全局状态才恢复为 `available`。旧任务的 `quiet` 保留；本人查看 `status` 后，可明确执行 `run TASK_ID --rearm -- COMMAND...` 开启新一轮监看，沿用原契约与截止时间。主动对话计划仍停用，须本人明确 `engage resume`。回来本身不表示接管任何告警。
 
 `end` 保存 `ended`，使当前看守在下一次状态检查时静默退出。它保留任务和真实验收结论，不终止 Agent 进程，不在第二天自动恢复。之后若要监看，先由本人执行 `back`，再显式启动 `watch`。`watch --once --json` 在结束状态只重试取消清理，返回 `stopped: true`。看守即使错过快速的 end → back，也会通过持久停止代数退出。
 
@@ -142,11 +183,11 @@ hell end
 
 ## 状态与进程
 
-状态目录由 `--state-dir`、环境变量 `HELL_STATE_DIR` 或系统用户配置目录下的 `hell-mode` 确定。状态使用 bbolt 单文件事务；CLI 与看守须共用目录。目录和运行日志按当前用户私有权限创建，日志位于 `runs/RUN_ID.log`。当前状态版本为 2，首次写入自动迁移 v1；旧程序会拒绝 v2，避免丢失人的静默边界。
+状态目录由 `--state-dir`、环境变量 `HELL_STATE_DIR` 或系统用户配置目录下的 `hell-mode` 确定。状态使用 bbolt 单文件事务；CLI 与看守须共用目录。目录和运行日志按当前用户私有权限创建，日志位于 `runs/RUN_ID.log`。当前状态版本为 3，首次写入自动迁移 v1 / v2；旧程序会拒绝 v3，避免丢失主动对话或人的静默边界。
 
 `doctor --json` 仅检查本地状态、看守最近活动时间与凭据是否存在；不会发送通知，也不证明手机可达。启用真实通知的 `run` 要求看守在最近五秒内有过活动；静默任务和 log 演练允许离线运行。看守最近活动仍无法保证之后持续存活。
 
-`watch` 在前台运行，不自行后台化或安装系统服务。当前实现仅支持本地共享状态，远程接入和整机故障覆盖尚未实现。macOS / Linux 的进程取消覆盖子进程组；Windows 仅有编译检查，后代进程清理尚未验收。
+`watch` 在前台运行，不自行后台化或安装系统服务。持续运行时，主动对话生成与任务扫描分开执行；`watch --once` 同步完成两者后退出。当前实现仅支持本地共享状态，远程接入和整机故障覆盖尚未实现。macOS / Linux 的进程取消覆盖子进程组；Windows 仅有编译检查，后代进程清理尚未验收。
 
 ## Hooks 与事件权限
 
@@ -154,7 +195,7 @@ hell end
 
 事件类型为 heartbeat、exited、failed、waiting、turn_completed。事件标识用于去重，旧执行事件不能改变新执行；一轮结束带有 background_work 时继续监看。结束事件将验收请求持久化，由看守执行，事件入口和 hook 回调不等待耗时验收。没有 hell run 上下文的宿主回调安静忽略，不影响普通宿主会话。
 
-验收在有时限的执行租约内进行，多个看守不会重复领取同一请求。验收进程结果丢失时记录 unknown。当前每个看守串行处理验收和发送，长检查会延后该进程的后续扫描；首版以单任务演练为主。
+验收在有时限的执行租约内进行，多个看守不会重复领取同一请求。验收进程结果丢失时记录 unknown。任务扫描内部仍串行处理验收与告警发送，长验收会延后后续任务扫描。持续看守中的主动对话生成独立运行；`watch --once` 按顺序完成任务扫描和主动对话生成。
 
 `hell setup` 返回的 hooks 片段属于 [导出集成文件](#导出集成文件)。使用监看 hooks 时，使用者须审阅并合并片段；真实宿主 hooks 验收尚未完成。
 
@@ -164,6 +205,6 @@ hell end
 
 默认通道为 log，只保存模拟结果。Pushover 使用 `--channel pushover`，从 HELL_PUSHOVER_APP_TOKEN、HELL_PUSHOVER_USER_KEY 读取凭据；CLI 不提供密钥参数，也不保存密钥。
 
-Pushover 每次应用发送采用 Emergency 通知，内部重复间隔为 30 秒，有效期不超过下次应用发送或告警到期。`max_attempts` 限制应用 API 尝试总数，不是设备响铃次数。发送超时或回执不明记为 unknown 并计入上限；取消失败会保留错误，最多尝试五次。
+任务告警的 Pushover 每次应用发送采用 Emergency 通知，内部重复间隔为 30 秒，有效期不超过下次应用发送或告警到期。`max_attempts` 限制应用 API 尝试总数，不是设备响铃次数。发送超时或回执不明记为 unknown 并计入上限；取消失败会保留错误，最多尝试五次。主动对话采用普通优先级，发送一次。
 
 该通道仅通过本地 HTTP 测试，真实手机、专注模式、静音、网络和供应商限制尚待本人实机验证。供应商回执不会自动完成目标或代替本人接管。

@@ -376,8 +376,26 @@ func (e Engine) Act(ctx context.Context, id, action string, until time.Time) (*m
 	return result, err
 }
 
-// Tick atomically claims attempts, then performs external calls without holding a database lock.
+// Tick runs one complete scheduling pass, including any due conversation agents.
 func (e Engine) Tick(ctx context.Context) (int, error) {
+	presence, err := e.Presence()
+	if err != nil {
+		return 0, err
+	}
+	if e.WatchEpoch == nil {
+		e.WatchEpoch = &presence.WatchEpoch
+	}
+	taskSends, err := e.TickTasks(ctx)
+	if err != nil {
+		return taskSends, err
+	}
+	engagementSends, err := e.TickEngagements(ctx)
+	return taskSends + engagementSends, err
+}
+
+// TickTasks keeps goal alarms independent of potentially slow conversation agents.
+// Continuous watchers run TickEngagements separately with their shared contact epoch.
+func (e Engine) TickTasks(ctx context.Context) (int, error) {
 	presence, err := e.Presence()
 	if err != nil {
 		return 0, err

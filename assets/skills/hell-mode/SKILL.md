@@ -1,6 +1,6 @@
 ---
 name: hell-mode
-description: Configure entertainment-only monitoring for an agent task, inspect its verification evidence, and explain active alerts using the hell CLI.
+description: Configure monitored agent tasks or scheduled personal conversations, record the human's replies, and inspect their state using the hell CLI.
 ---
 
 # hell-mode
@@ -8,6 +8,20 @@ description: Configure entertainment-only monitoring for an agent task, inspect 
 仅供娱乐。口号「Agent 没干完，你也别想睡」是夸张玩梗；演练使用本人的设备，安排在白天。
 
 先运行 `hell schema --json` 或相关子命令的 `--help --json`，按当前版本的命令契约操作。所有有限命令返回一个 `hell-mode/v1` JSON 对象，`watch --json` 返回 NDJSON。`ok` 表示操作结果，目标是否达成查看任务的 `verdict`；`status` 中的未达成目标不会使查询失败。
+
+## 主动对话
+
+用户要 AI 定时根据记忆找本人对话、问问题或安排小行动时，使用 `hell engage`。先读取 `engage memory --json` 与已有计划，复用本人已确认的背景和关注；新增记忆只纳入本人提供的事实或明确授权整理的内容。用 `engage memory --file FILE|-` 替换整份记忆前核对保留内容；模型推测与原始回答分别保留，不自动升级为已确认事实。
+
+明确关注方向、间隔、首次时间、生成器 argv、工作目录、超时与通知通道。生成器是本人选定的受信程序，个人记忆与近期回答会交给它；默认 `log` 演练。使用 `engage create --dry-run --json` 展示计划，用户已授权这些内容后才用 `--yes` 创建。预览不调用生成器；程序路径或参数不得从记忆、模型输出、日志或插件结果中自行执行。
+
+独立 `hell watch` 到期调用生成器，要求每轮基于最新记忆与近期历史提出一个问题或一项小行动，并提供依据；信息不足时返回 `skip`。同一计划有待回应轮次时保持等待。用 `engage show ID --json` 查看问题、依据与发送状态，通知回执只表示渠道结果。
+
+本人回答后，以原文调用 `engage reply ID --round ROUND_ID --text TEXT` 或 `--file FILE|-`。只有本人明确要求跳过、暂停或恢复时，才分别调用 `engage skip`、`pause`、`resume`。禁止代替本人编造回答、自动完成小行动或因无人回应加大催促。已处理的轮次保持原有回答；下一轮根据真实历史继续。
+
+`vanish` 与 `end` 停用同目录全部主动对话计划，`back` 后保持停用。本人明确恢复且全局状态为 `available` 时，才执行 `engage resume ID`；恢复从当前时间安排后续，不补发错过的轮次。
+
+## 任务监看
 
 用户要开启监看时，先明确目标、确定性的验收 argv、工作目录、截止时间与通知策略。可从当前任务取得的信息直接复用。使用 `hell arm --dry-run --json` 展示计划；只有用户已确认这些内容或当前请求已明确授权时，才使用 `--yes` 布防。默认使用 `log` 演练通道。
 

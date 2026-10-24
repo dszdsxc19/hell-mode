@@ -1,6 +1,6 @@
 # Contributing
 
-hell-mode 是仅供娱乐的 Agent 协作实验，包含任务监看与持续质疑两条使用路径。欢迎修复可复现的问题、完善 skill 对话规则、补充宿主集成证据和开发通知插件。监看演练请使用自己的测试设备，默认使用 `log` 通道。
+hell-mode 是仅供娱乐的 Agent 协作实验，包含任务监看、主动对话与持续质疑。欢迎修复可复现的问题、完善 skill 对话规则、补充宿主集成证据和开发通知插件。演练请使用自己的测试设备，默认使用 `log` 通道。
 
 ## 本地开发
 
@@ -21,15 +21,23 @@ CI 在最低 Go 版本和当前稳定 Go 上测试，在 macOS 上运行同一�
 | 路径 | 内容 |
 | --- | --- |
 | `cmd/hell`、`internal/cli` | 进程入口、命令、help、JSON 与退出码 |
-| `internal/model`、`internal/engine` | 任务、验收、告警与调度 |
+| `internal/model`、`internal/engine` | 任务、验收、告警、主动对话与调度 |
 | `internal/state` | 本地持久状态与事务 |
 | `internal/notify`、`internal/plugins` | 内置通道与子进程插件 |
 | `pkg/protocol`、`examples/hell-plugin-demo` | 公共插件协议类型与模拟插件 |
-| `assets/skills/hell-mode/SKILL.md` | 目标契约、叫人策略与监看操作规则 |
+| `assets/skills/hell-mode/SKILL.md` | 目标契约、叫人策略、监看与主动对话操作规则 |
 | `assets/skills/hell-challenge/SKILL.md`、`internal/cli/challenge.go` | 持续质疑的宿主对话规则与 CLI 输出入口 |
 | `assets/assets.go`、`internal/cli/integrations.go` | 两份 skill 的嵌入、导出与宿主事件适配 |
 
 先阅读 [领域术语](CONTEXT.md)、[CLI 契约](docs/cli.md) 和 [插件协议](docs/plugins.md)。保持验收结论与告警处理分别记录：接管停止提醒，目标证据继续保留。JSON stdout、退出码和插件协议也是面向 Agent 的公共接口，变更时请说明兼容影响。
+
+## 主动对话的验证
+
+按 [主动对话指南](docs/engage.md) 使用独立状态目录和示例生成器演练创建、到期生成、查询与回应。示例程序只验证协议与调度；真实 AI 接入另行保留模型、生成器命令、输入记忆、关键轮次和实际结果。
+
+核心回归须覆盖：预览不写状态或调用生成器、最新记忆与历史传入、每个计划一轮待回应、旧轮次回应拒绝、回答或跳过后安排下一轮、错过周期合并、生成和发送失败可追溯、并发看守去重，以及 vanish / end 停用、back 保持停用。
+
+生成质量按真实多轮记录验收：问题与本人关注有关；依据可回到记忆或历史；回答影响后续邀请；信息不足时跳过。本人原始回答、模型推测与已确认记忆分别保存。通知测试核对脱敏内容与普通优先级，手机效果单独记录。
 
 ## 质疑模式的验证
 

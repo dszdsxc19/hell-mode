@@ -60,6 +60,8 @@ command 是 argv，首项在注册时解析为绝对路径，不隐式通过 she
 
 stdout 上限为 1 MiB，stderr 捕获上限为 64 KiB。超时会终止进程；macOS / Linux 同时终止其进程组。插件须尊重 expires_at，并将 attempt_id 用作供应商支持的幂等键。取消应幂等，已经停止的回执可继续返回 cancelled。
 
+主动邀谈复用同一协议：`task_id` 表示邀谈计划，`incident_id` 表示轮次，并附带 `priority: "normal"`。插件须把它作为一次普通通知处理，不启用重复响铃或紧急升级；成功时也可返回 `{"state":"sent"}`，无需回执。正文只含通用提示与本地查看命令，个性化内容保存在本地。任务告警省略该字段，沿用原有策略。
+
 核心在调用前持久化发送尝试。崩溃或超时造成结果不明时，记录 unknown 并计入次数上限，后续按策略执行新的尝试；不承诺跨任意供应商的严格恰好一次。queued 只表示供应商受理，不表示设备收到或本人清醒。
 
 ## 示例插件
@@ -73,4 +75,4 @@ hell plugin add --manifest demo-plugin.json --yes --json
 hell plugin list --json
 ```
 
-demo-plugin.json 使用本文开头的 manifest。注册后在布防时使用 `--channel demo`。同名注册拒绝覆盖；移除前须停止引用该通道的任务，并处理未取消的回执。`plugin remove demo` 仅移除注册，不删除程序。
+demo-plugin.json 使用本文开头的 manifest。注册后在布防时使用 `--channel demo`。同名注册拒绝覆盖；移除前须停止引用该通道的任务、暂停邀谈计划，并处理未取消的回执或在途发送。`plugin remove demo` 仅移除注册，不删除程序。

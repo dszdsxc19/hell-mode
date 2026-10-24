@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"time"
+
 	"github.com/dszdsxc19/hell-mode/internal/fault"
 	"github.com/dszdsxc19/hell-mode/internal/plugins"
 	"github.com/dszdsxc19/hell-mode/internal/state"
@@ -57,7 +59,7 @@ func (a *app) pluginCommand() *cobra.Command {
 	add.Flags().BoolVar(&yes, "yes", false, "Trust the executable, run describe and persist registration")
 	add.Flags().BoolVar(&dry, "dry-run", false, "Validate without executing the plugin or writing state")
 	root.AddCommand(add)
-	root.AddCommand(&cobra.Command{Use: "remove NAME", Short: "Unregister a plugin; active tasks and outstanding receipts prevent removal", Example: "  hell plugin remove desktop --json", Args: args(cobra.ExactArgs(1)), RunE: func(_ *cobra.Command, values []string) error {
+	root.AddCommand(&cobra.Command{Use: "remove NAME", Short: "Unregister a plugin; active tasks, conversations and outstanding sends prevent removal", Example: "  hell plugin remove desktop --json", Args: args(cobra.ExactArgs(1)), RunE: func(_ *cobra.Command, values []string) error {
 		return a.engine().Store.Update(func(st *state.State) error {
 			if _, exists := st.Plugins[values[0]]; !exists {
 				return fault.New("not_found", 4, "plugin is not registered")
@@ -74,6 +76,19 @@ func (a *app) pluginCommand() *cobra.Command {
 						if attempt.Receipt != "" && !attempt.Cancelled {
 							return fault.New("conflict", 5, "plugin still has outstanding notification receipts")
 						}
+					}
+				}
+			}
+			for _, g := range st.Engagements {
+				if g.Channel != values[0] {
+					continue
+				}
+				if g.Active {
+					return fault.New("conflict", 5, "pause conversations using this plugin first")
+				}
+				for _, round := range g.Rounds {
+					if d := round.Delivery; d != nil && d.State == "sending" && time.Now().Before(d.LeaseUntil) {
+						return fault.New("conflict", 5, "plugin still has an in-flight conversation notification")
 					}
 				}
 			}

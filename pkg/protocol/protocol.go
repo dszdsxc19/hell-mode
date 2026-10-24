@@ -21,6 +21,7 @@ type Notification struct {
 	AttemptID  string    `json:"attempt_id"`
 	Title      string    `json:"title"`
 	Body       string    `json:"body"`
+	Priority   string    `json:"priority,omitempty"` // "normal" opts out of emergency repetition for proactive invitations.
 	Receipt    string    `json:"receipt,omitempty"`
 	ExpiresAt  time.Time `json:"expires_at"`
 }

@@ -10,13 +10,22 @@
 
 给 Agent 派一个任务，约定目标和验收条件，然后让独立看守盯着它。异常退出、失联、验收失败，需要你时就通知你。Agent 说做完了，验收未必同意。
 
-**当前阶段：Go CLI 初版。** 已实现本地任务、确定性验收、独立看守、通知插件、Claude Code hooks 适配器与随包 skill。
+**当前阶段：Go CLI 初版。** 已实现本地任务、确定性验收、独立看守、主动对话、通知插件、Claude Code hooks 适配器与随包 skill。
 
 | 想做什么 | 入口 |
 | --- | --- |
+| 让 AI 根据记忆主动问你问题、给你小行动 | [主动对话](docs/engage.md)：保存关注与背景，预览并启用定时计划。 |
 | 让 Agent 持续质疑你的判断 | [质疑模式](docs/challenge.md)：加载 skill，在当前对话中开始。 |
 | 监看 Agent 的任务与验收结果 | [本地演练](#开始演练)：默认使用 `log` 通道。 |
 | 安装 CLI 或把 skill 放进其他项目 | [安装说明](docs/install.md)。 |
+
+## 让 AI 主动来找你
+
+对 AI 的输入，也是人的表达与行动。`hell engage` 把发起权交给 AI：按你设定的间隔，读取你保存的个人记忆、关注方向与之前的回答，提出一个问题或一项小行动。例如，你保存了「最近想练习技术表达」，它可以邀请你用三句话讲清今天的一次技术取舍。
+
+生成由你指定的 AI 命令执行；看守保存每轮内容与依据，再通过已有通道发出一次通知。你回答或跳过后，才安排下一轮；没有回应时留在原地等待。你可以随时暂停，`vanish` 和 `end` 也会停用主动对话计划。
+
+配置、协议演练与真实 AI 接入见 [主动对话指南](docs/engage.md)。默认 `log` 通道记录演练结果；本地看守需要持续运行，电脑休眠期间无法执行。
 
 ## 也可以，让 Agent 质疑你
 
@@ -109,7 +118,7 @@ flowchart TD
 
 CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计时与重复通知由独立进程执行；Agent 对话结束后，看守仍可继续运行。
 
-`hell setup` 导出供审阅的 Claude Code hooks 配置片段，以及 `hell-mode`、`hell-challenge` 两份 skill。`hell-mode` 协助配置任务监看，`hell-challenge` 可独立用于质疑对话。宿主安装与现有配置合并见 [安装说明](docs/install.md)。
+`hell setup` 导出供审阅的 Claude Code hooks 配置片段，以及 `hell-mode`、`hell-challenge` 两份 skill。`hell-mode` 协助配置任务监看与主动对话，`hell-challenge` 可独立用于质疑对话。宿主安装与现有配置合并见 [安装说明](docs/install.md)。
 
 ## 当前实现与验证
 
@@ -120,6 +129,7 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计
 | CLI、持久状态、独立看守、log 演练 | 已有本地回归与 CLI 子进程演练；CI 持续检查。 |
 | Claude Code hooks 与监看 skill | 已有适配代码和样本回归，真实宿主安装与行为待验收。 |
 | `hell-challenge` 与 `challenge` 入口 | CLI、导出与无状态副作用有回归；独立 Agent 场景试跑已覆盖追问、接受证据、个人取舍与暂停，跨宿主持续效果待验证。 |
+| `hell engage` 主动对话 | 合成记忆、演练回答与 Claude Code 2.1.287 的两轮 `log` 演练通过；长期相关性与真实手机触达待验收。 |
 | Pushover Emergency | 请求与取消已通过本地 HTTP 模拟，真实手机待验收。 |
 | 子进程通知插件 | 版本化 JSON 协议、manifest、超时、错误处理与模拟插件已有回归。 |
 
@@ -136,7 +146,8 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计
 ## 项目资料
 
 - [质疑模式](docs/challenge.md)：加载、对话示例、暂停、切回执行与效果排查。
-- [MVP 设计](docs/mvp.md)：监看与质疑的职责、现有功能与验收标准。
+- [主动对话](docs/engage.md)：个人记忆、定时邀约、回答与生成协议。
+- [MVP 设计](docs/mvp.md)：监看、主动对话与质疑的职责、现有功能与验收标准。
 - [CLI 契约](docs/cli.md)：人和 Agent 共用的 help、schema、输入输出与退出码。
 - [安装说明](docs/install.md)：CLI 构建、skill 安装更新、CI 预览构建与平台限制。
 - [插件开发](docs/plugins.md)：manifest、子进程协议与示例。
@@ -165,7 +176,7 @@ CLI 与 skill 使用同一套操作能力，hooks 负责提交运行信号。计
 ./bin/hell --state-dir /tmp/hell-mode-demo back
 ```
 
-回来不补发旧提醒，旧任务保持静默；重新监看须本人明确使用 `run --rearm`。这组动作作用于同一状态目录的 hell-mode 通知，宿主自己的通知和权限弹窗仍由宿主控制。状态持久化、到期不自动返回、不补发及看守退出，已有回归与真实 CLI 演练验证。详细约定见 [CLI 契约](docs/cli.md#番茄失踪与今天结束)。
+回来不补发旧提醒，旧任务保持静默；重新监看须本人明确使用 `run --rearm`，主动对话计划须使用 `engage resume` 恢复。这组动作作用于同一状态目录的 hell-mode 通知，宿主自己的通知和权限弹窗仍由宿主控制。状态持久化、到期不自动返回、不补发及看守退出，已有回归与真实 CLI 演练验证。详细约定见 [CLI 契约](docs/cli.md#番茄失踪与今天结束)。
 
 ## 今天到此为止
 

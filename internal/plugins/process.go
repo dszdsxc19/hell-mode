@@ -101,7 +101,8 @@ func Call(ctx context.Context, m protocol.Manifest, method string, n *protocol.N
 	if method == "describe" && (response.Result.Name != m.Name || !slices.Contains(response.Result.Capabilities, "notify") || !slices.Contains(response.Result.Capabilities, "cancel")) {
 		return nil, fmt.Errorf("plugin must describe matching name with notify and cancel capabilities")
 	}
-	if method == "notify" && (response.Result.Receipt == "" || !slices.Contains([]string{"queued", "simulated"}, response.Result.State)) {
+	normalSent := n != nil && n.Priority == "normal" && response.Result.State == "sent"
+	if method == "notify" && !normalSent && (response.Result.Receipt == "" || !slices.Contains([]string{"queued", "simulated"}, response.Result.State)) {
 		return nil, fmt.Errorf("plugin notify needs a receipt and queued or simulated state")
 	}
 	if method == "cancel" && response.Result.State != "cancelled" {
