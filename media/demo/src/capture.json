@@ -31,7 +31,7 @@
   },
   "end": {
     "mode": "ended",
-    "message": "任务未完成。\n\n你决定今天到此为止。\n\n看守已停止。",
+    "message": "任务未完成。\n\n气势倒是下班了。\n\n看守已停止。",
     "watch_exit_code": 0,
     "verdict": "unmet"
   }

@@ -35,8 +35,8 @@ command 是 argv，首项在注册时解析为绝对路径，不隐式通过 she
     "task_id": "task_example",
     "incident_id": "incident_example",
     "attempt_id": "attempt_example",
-    "title": "hell-mode: task needs attention",
-    "body": "Task task_example: verification_unmet. Entertainment only.",
+    "title": "hell-mode：你有事了",
+    "body": "验收没过，先别急着散会。\n任务 task_example · verification_unmet\n第 1 次通知尝试。详情：hell status task_example",
     "expires_at": "2026-10-23T10:00:00Z"
   }
 }

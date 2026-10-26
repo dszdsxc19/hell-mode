@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -20,6 +22,7 @@ type fakeNotifier struct {
 	fail           bool
 	entered        chan struct{}
 	release        chan struct{}
+	notifications  []protocol.Notification
 }
 
 func (f *fakeNotifier) Call(_ context.Context, _, method string, n protocol.Notification) (*protocol.Result, error) {
@@ -30,6 +33,7 @@ func (f *fakeNotifier) Call(_ context.Context, _, method string, n protocol.Noti
 		return &protocol.Result{State: "cancelled"}, nil
 	}
 	f.sends++
+	f.notifications = append(f.notifications, n)
 	f.mu.Unlock()
 	if f.entered != nil {
 		close(f.entered)
@@ -84,6 +88,53 @@ func TestFailedVerificationAndBoundedRecovery(t *testing.T) {
 	got, _ := e.Get(task.ID)
 	if got.Verdict != "unmet" || got.Incident.State != "exhausted" || n.sends != 2 {
 		t.Fatalf("task=%+v sends=%d", got, n.sends)
+	}
+}
+
+func TestNotificationKeepsRedactedFactsAcrossUnknownDelivery(t *testing.T) {
+	e, task, now, n := fixture(t, "sh", "-c", "printf 'private verification output'; exit 1")
+	if err := e.Store.Update(func(st *state.State) error {
+		st.Tasks[task.ID].Goal = "private goal"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Verify(context.Background(), task.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	n.fail = true
+	if _, err := e.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Restart after an unknown delivery: the next message uses the durable attempt
+	// number without claiming that the first message was delivered or ignored.
+	e = Engine{Store: e.Store, Notifier: n, Now: func() time.Time { return *now }}
+	n.fail = false
+	*now = now.Add(time.Minute)
+	if _, err := e.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(n.notifications) != 2 {
+		t.Fatal(n.notifications)
+	}
+	for i, notification := range n.notifications {
+		for _, fact := range []string{task.ID, "verification_unmet", "hell status " + task.ID, fmt.Sprintf("第 %d 次通知尝试", i+1)} {
+			if !strings.Contains(notification.Body, fact) {
+				t.Fatalf("notification lost operational fact %q: %+v", fact, notification)
+			}
+		}
+		for _, claim := range []string{"private", "忽略", "已读", "装没看见"} {
+			if strings.Contains(notification.Body, claim) {
+				t.Fatalf("notification leaked content or invented human behavior: %+v", notification)
+			}
+		}
+	}
+	if n.notifications[0].Body == n.notifications[1].Body {
+		t.Fatal("repeat did not advance the recorded attempt")
+	}
+	got, err := e.Get(task.ID)
+	if err != nil || got.Verdict != "unmet" || got.Incident.Attempts[0].State != "unknown" || got.Incident.Attempts[1].State != "queued" {
+		t.Fatal(got, err)
 	}
 }
 
@@ -246,6 +297,9 @@ func TestUnknownSendUsesBudgetAndTimeoutIsNotUnmet(t *testing.T) {
 	got, _ = e.Get(task.ID)
 	if got.Incident.Attempts[0].State != "unknown" || len(got.Incident.Attempts) != 1 {
 		t.Fatal(got)
+	}
+	if len(n.notifications) != 1 || !strings.Contains(n.notifications[0].Body, "verification_unknown") || strings.Contains(n.notifications[0].Body, "验收没过") {
+		t.Fatal("unknown verification was presented as a failed check", n.notifications)
 	}
 }
 

@@ -140,7 +140,7 @@ try {
   assert.equal(watcher.exitCode, null, "watchdog stopped before end");
   assert.equal(watcher.signalCode, null);
   const ending = cli(["end"], 0, false);
-  assert.equal(ending, "任务未完成。\n\n你决定今天到此为止。\n\n看守已停止。");
+  assert.equal(ending, "任务未完成。\n\n气势倒是下班了。\n\n看守已停止。");
   const watchdogTimeout = setTimeout(() => watcher.kill("SIGKILL"), 5000);
   let watchExit;
   try {

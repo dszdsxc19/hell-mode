@@ -530,10 +530,14 @@ func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) erro
 		return err
 	}
 	in := t.Incident
+	attemptNumber := 0
 	if in != nil && in.ID == incidentID {
-		for _, attempt := range in.Attempts {
-			if attempt.ID == attemptID && (attempt.State != "sending" || !e.now().Before(attempt.LeaseUntil)) {
-				return nil
+		for i, attempt := range in.Attempts {
+			if attempt.ID == attemptID {
+				if attempt.State != "sending" || !e.now().Before(attempt.LeaseUntil) {
+					return nil
+				}
+				attemptNumber = i + 1
 			}
 		}
 	}
@@ -557,7 +561,7 @@ func (e Engine) send(ctx context.Context, id, incidentID, attemptID string) erro
 	if in.ExpiresAt.Before(expires) {
 		expires = in.ExpiresAt
 	}
-	n := protocol.Notification{TaskID: id, IncidentID: incidentID, AttemptID: attemptID, Title: "hell-mode: task needs attention", Body: fmt.Sprintf("Task %s: %s. Inspect with hell status %s. Entertainment only.", id, in.Reason, id), ExpiresAt: expires}
+	n := protocol.Notification{TaskID: id, IncidentID: incidentID, AttemptID: attemptID, Title: "hell-mode：你有事了", Body: fmt.Sprintf("%s\n任务 %s · %s\n第 %d 次通知尝试。详情：hell status %s", incidentMessage(in.Reason, attemptNumber), id, in.Reason, attemptNumber, id), ExpiresAt: expires}
 	result, sendErr := e.Notifier.Call(ctx, t.Policy.Channel, "notify", n)
 	err = e.Store.Update(func(st *state.State) error {
 		t, err := task(st, id)

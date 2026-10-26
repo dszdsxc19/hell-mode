@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,7 +79,7 @@ func TestEndKeepsUnfinishedWorkAndHasAFinalLine(t *testing.T) {
 	_, _, _ = invoke(t, dir, "", "verify", id)
 	var out, stderr bytes.Buffer
 	code := Execute(context.Background(), []string{"--state-dir", dir, "end"}, strings.NewReader(""), &out, &stderr, "test")
-	if code != 0 || stderr.Len() != 0 || out.String() != "任务未完成。\n\n你决定今天到此为止。\n\n看守已停止。\n" {
+	if code != 0 || stderr.Len() != 0 || out.String() != "任务未完成。\n\n气势倒是下班了。\n\n看守已停止。\n" {
 		t.Fatal(code, out.String(), stderr.String())
 	}
 	out.Reset()
@@ -95,5 +96,28 @@ func TestEndKeepsUnfinishedWorkAndHasAFinalLine(t *testing.T) {
 	_ = json.Unmarshal(response.Data, &task)
 	if task.Verdict != "unmet" || !task.Quiet {
 		t.Fatal(task)
+	}
+}
+
+func TestEndDoesNotInventUnfinishedWork(t *testing.T) {
+	for _, completedTask := range []bool{false, true} {
+		t.Run(fmt.Sprint(completedTask), func(t *testing.T) {
+			dir := t.TempDir()
+			if completedTask {
+				id := armForTest(t, dir, `["sh","-c","exit 0"]`)
+				if code, _, _ := invoke(t, dir, "", "verify", id); code != 0 {
+					t.Fatal(code)
+				}
+			}
+			var out, stderr bytes.Buffer
+			code := Execute(context.Background(), []string{"--state-dir", dir, "end"}, strings.NewReader(""), &out, &stderr, "test")
+			if code != 0 || stderr.Len() != 0 || !strings.Contains(out.String(), "看守已停止") || strings.Contains(out.String(), "未完成") || strings.Contains(out.String(), "气势") {
+				t.Fatal(code, out.String(), stderr.String())
+			}
+			code, response, _ := invoke(t, dir, "", "presence")
+			if code != 0 || !bytes.Contains(response.Data, []byte(`"mode":"ended"`)) {
+				t.Fatal(code, string(response.Data))
+			}
+		})
 	}
 }

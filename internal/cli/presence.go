@@ -49,7 +49,7 @@ No reason, score, timer alarm, or automatic return is recorded.`, Example: "  he
 		if err != nil {
 			return err
 		}
-		a.human = "番茄失踪已开启。\n人类暂不提供服务。\n需要人的事情，请保存并等待。"
+		a.human = "番茄失踪已开启。\n行，先消失。需要你的事情我攒着。"
 		return a.cancellationNotice(p)
 	}}
 	cmd.Flags().DurationVar(&duration, "for", 25*time.Minute, "Agreed quiet period; expiry never resumes notifications")
@@ -66,7 +66,7 @@ explicitly request run --rearm. Ended watchdog processes do not restart.`, Examp
 		if err != nil {
 			return err
 		}
-		a.human = "你回来了。\n任务和问题保存在这里。"
+		a.human = "回来了？事情也还在。\n旧提醒不补发，要继续盯哪件事你再说。"
 		return nil
 	}}
 }
@@ -88,13 +88,15 @@ their receipts are cancelled when available.`, Example: "  hell end\n  hell end 
 			return err
 		}
 		first := "任务记录已保留。"
+		parting := "行，今天先散会。"
 		for _, task := range tasks {
 			if task.Verdict != "met" {
 				first = "任务未完成。"
+				parting = "气势倒是下班了。"
 				break
 			}
 		}
-		a.human = first + "\n\n你决定今天到此为止。\n\n看守已停止。"
+		a.human = first + "\n\n" + parting + "\n\n看守已停止。"
 		return a.cancellationNotice(p)
 	}}
 }
